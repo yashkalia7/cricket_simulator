@@ -1,0 +1,766 @@
+# BUILD.md — Cricket Tactical Simulator
+
+Operational build guide. Read fully before writing code in any session.
+Milestones are ordered. Do not start M(n+1) until M(n) meets its acceptance criteria.
+
+**Platform: React Native (Expo) first, web second.**
+
+---
+
+## 0. What this is
+
+A decision gym for cricket. The user is dropped into a precise match state, has to commit to a
+tactical decision, and gets shown the trade-offs. Chess.com meets a flight simulator meets
+Duolingo.
+
+**Not:** a score predictor, a fantasy app, a team-management tool, a live match tracker.
+
+**The commitment that shapes everything:** there is no single correct answer to a cricket
+tactical question. There is a distribution of defensible answers conditioned on execution
+skill, matchup, field, ground size and risk appetite. The product never presents itself as an
+oracle. It shows 2–3 options with trade-offs and asks the user to commit and justify.
+
+---
+
+## 1. Three phases
+
+| Phase | What answers the user | Effort |
+|---|---|---|
+| **v0.1** | Nothing. The app asks, the user answers, the decision is logged. | 4–5 weeks |
+| **Phase 1** | A model, behind a fixed interface, schema-constrained. | 3–5 days |
+| **Phase 2** | A hand-authored RULES array built from watching real matches. | 1 weekend + 1 coach session |
+
+Phases 1 and 2 implement the same signature:
+
+```ts
+getSuggestions(scenario: ScenarioState): Promise<Suggestion[]>
+```
+
+This is the most important line in the project. Swapping phase 1 for phase 2 must be a
+one-file change. If it isn't, the interface leaked and that's a bug.
+
+---
+
+## 2. Monorepo shape
+
+```
+apps/
+  mobile/                  Expo — PRIMARY, ships first
+  web/                     Next.js — later, reuses domain + tokens only
+packages/
+  domain/                  Pure TypeScript. Zero runtime dependencies beyond zod.
+  tokens/                  Design tokens as plain TS objects.
+docs/
+  OPEN_QUESTIONS.md  CHANGELOG.md  DECISIONS.md  WATCH_NOTES.md
+```
+
+pnpm workspaces + Turborepo.
+
+**`packages/domain` is the whole reason two clients are affordable.** It contains the ontology,
+geometry, rules engine, scenario model, and `getSuggestions`. No React, no DOM, no React Native,
+no fetch, no side effects. Enforce it with an ESLint `no-restricted-imports` rule that fails the
+build on any import from outside the package.
+
+**`packages/tokens` is plain TS objects**, not Tailwind config and not StyleSheet. Both apps
+derive styling from it. A colour changes in one place.
+
+```ts
+// packages/tokens/src/index.ts
+export const color = { ink900: '#07090B', leather: '#A32B2B', /* ... */ } as const;
+export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 6: 24, 8: 32 } as const;
+export const radius = { sm: 6, md: 10, lg: 16, pill: 999 } as const;
+```
+
+**There is deliberately no `packages/ui`.** Cross-platform component sharing produces components
+full of `Platform.select` that are worse on both targets. Write the UI twice. The second time is
+fast because all the logic already exists in `domain`.
+
+---
+
+## 3. Stack
+
+### apps/mobile (build this)
+
+| Concern | Choice | Note |
+|---|---|---|
+| Framework | Expo (managed) + expo-router | File-based routing, mirrors Next mentally |
+| Styling | NativeWind v4 | Tailwind syntax; consumes `packages/tokens` |
+| Animation | Reanimated 3 + Moti | Moti gives a Framer-Motion-like declarative API |
+| Gestures | react-native-gesture-handler | Required for fielder drag |
+| 2D ground | react-native-svg | API close enough to web SVG that geometry code ports |
+| Storage | react-native-mmkv | Synchronous, fast; Zustand persist adapter |
+| State | Zustand | Unchanged from web |
+| 3D (later) | @react-three/fiber/native + expo-gl | Deferred to M8. May get cut. |
+| Tests | Vitest (domain) + Maestro (E2E) | Maestro over Detox — far less setup |
+
+### apps/web (later)
+
+Next.js App Router · Tailwind · Framer Motion · react-three-fiber · same Zustand slices with a
+localStorage adapter.
+
+### Fonts
+
+Display **Archivo Expanded**, body **Inter Tight**, data **IBM Plex Mono**.
+
+`// VERIFY:` Archivo's expanded width is a variable-font axis, and variable axis support in React
+Native is inconsistent across Android versions. Test on a real mid-range Android at M0. If it
+fails, ship static Archivo Bold for display and record the substitution in `DECISIONS.md` rather
+than letting the type drift silently.
+
+---
+
+## 4. Working agreement
+
+**Non-negotiables:**
+
+- No invented cricket facts. If a Law, restriction or number is uncertain, write `// VERIFY:`
+  with what needs checking and log it in `docs/OPEN_QUESTIONS.md`. A wrong fielding restriction
+  is a credibility-ending bug in this product.
+- Every domain concept comes from `packages/domain/ontology`. No string literals for positions,
+  lengths, lines or phases anywhere in a component.
+- No placeholder or lorem content. Every string is real cricket language.
+- Nothing platform-specific enters `packages/domain`. Ever.
+
+**Definition of done:**
+
+1. Type-checks with `strict: true`. No `any`. No `@ts-expect-error` without a comment.
+2. Unit tests for anything in `packages/domain`.
+3. Screen reader labels on every interactive element; `AccessibilityInfo.isReduceMotionEnabled`
+   respected.
+4. Runs at 60fps on a mid-range Android (target class: Pixel 6a / Galaxy A54), not just the iOS
+   simulator.
+5. No Reanimated warnings, no bridge-serialisation warnings in dev.
+
+---
+
+## 5. Design direction
+
+Dark-first, minimal, sports-analytics. Grounded in cricket's own materials rather than generic
+dark-mode-plus-neon.
+
+**Palette — a night match:**
+
+```
+ink900   #07090B   screen ground, near-black with a cold cast
+ink800   #0E1216   raised surface
+ink700   #161C22   card
+ink500   #2A3440   hairline / divider
+chalk100 #F2F4F3   primary text, sightscreen white — never pure #FFF
+chalk400 #8D9AA5   secondary text
+leather  #A32B2B   primary accent. Cricket-ball red, oxidised not vermilion.
+sodium   #E0A34A   restriction violations, warnings, floodlight amber
+turf     #3E7A5E   legal / confirmed states, muted pitch green
+```
+
+`leather` appears at most twice per screen: the ball, and the primary action. Everything else is
+ink and chalk.
+
+**Type.** `147/4` at 56pt in Archivo Expanded with `/4` in chalk400 is the hero of the HUD.
+Scores are typographic events, not labels. Tabular figures always on for anything numeric.
+
+**Signature element — the Over Tape.** A persistent horizontal ribbon of the last twelve
+deliveries across every screen. Each ball a cell with an outcome glyph, colour-coded, current
+ball pulsing in leather. `19.1 19.2 19.3` is real sequence information, not decoration. This is
+what the product should be recognisable by. On a phone it sits directly under the score block
+and scrolls horizontally.
+
+**Motion.** One orchestrated moment per screen. Card entry: 240ms,
+`Easing.bezier(.16,1,.3,1)`. Fielder drag: spring, damping 18, stiffness 220. Restriction
+violation: 120ms sodium flash, no bounce. **All drag and gesture animation runs on the UI thread
+via Reanimated worklets** — a fielder drag crossing the bridge per frame will feel broken, and
+it's the single most likely place this app feels cheap.
+
+**Mobile layout rules:**
+
+- Primary actions live in the bottom third. Nothing important above the thumb line.
+- Minimum touch target 44pt. Fielder markers get an invisible 44pt hit area regardless of visual
+  size.
+- The delivery composer is a bottom sheet, not a modal.
+- No hover states anywhere. Anything the web design would reveal on hover needs a tap or must be
+  always visible.
+
+---
+
+## 6. Domain: ontology
+
+Not OWL, not RDF. A controlled vocabulary plus a typed relation graph, as TypeScript and JSON.
+
+### Coordinate system
+
+Top-down. Origin at the **striker's stumps**. `+Y` toward the bowler's end (0°). Angles increase
+**clockwise** from above. Metres.
+
+Right-hand batter: off side 0°–180°, leg side 180°–360°.
+Left-hand batter: mirror with `θ' = (360 − θ) mod 360`. **Store positions once, mirror at
+render.** Never duplicate the table.
+
+```ts
+export interface FieldingPosition {
+  id: PositionId;          // 'deep_backward_square_leg'
+  label: string;           // 'Deep Backward Square Leg'
+  shortLabel: string;      // 'DBSL' — phones use this almost always
+  angleDeg: number;        // 0–360, RHB frame
+  radiusM: number;
+  side: 'off' | 'leg' | 'straight';
+  behindSquare: boolean;   // for the two-behind-square-leg rule
+  catching: boolean;
+  aliases: string[];       // 'cow corner', 'fine third'
+}
+```
+
+Anchors (RHB, metres from striker's stumps):
+
+| Position | θ° | r | | Position | θ° | r |
+|---|---|---|---|---|---|---|
+| Wicketkeeper | 180 | 14 | | Mid-on | 335 | 33 |
+| First slip | 172 | 13 | | Long on | 340 | 68 |
+| Gully | 108 | 22 | | Midwicket | 307 | 38 |
+| Point | 88 | 38 | | Deep midwicket | 307 | 66 |
+| Cover | 55 | 38 | | Square leg | 270 | 38 |
+| Mid-off | 25 | 33 | | Deep square leg | 270 | 66 |
+| Long off | 20 | 68 | | Fine leg | 214 | 66 |
+| Third man | 132 | 66 | | Short fine leg | 214 | 26 |
+| Deep point | 88 | 66 | | Deep cover | 55 | 66 |
+
+Fill the rest in the same frame: silly point, short leg, leg gully, cow corner, long leg,
+backward point, extra cover, straight hit, deep backward square, second/third slip, leg slip,
+fly slip, short cover, short midwicket.
+
+### Geometry
+
+- Pitch: 20.12m between stumps. Bowler's stumps at `+20.12`.
+- **Inner circle:** two semicircles of radius **27.43m** centred on the *middle stump at each
+  end*, joined by lines parallel to the pitch. A capsule, **not** a circle. This is the most
+  commonly wrong thing in cricket apps.
+- Boundary: elliptical, configurable. Default 70m straight / 64m square. Ground size is a
+  first-class scenario parameter — it materially changes correct tactics.
+
+```ts
+export function isInsideCircle(p: Vec2): boolean          // capsule test
+export function distanceFromBat(p: Vec2): number
+export function nearestCanonicalPosition(p: Vec2): { id: PositionId; deltaM: number }
+export function worldToScreen(p: Vec2, viewport: Viewport): Vec2   // pure — used by both apps
+```
+
+`nearestCanonicalPosition` lets a user drag freely and still get a real label — snapping to the
+*name*, not the coordinate. Display "Deep Cover +4m finer", never force onto a preset dot. On a
+phone this matters more than on desktop: imprecise fingers still produce meaningful labels.
+
+`worldToScreen` lives in domain so both renderers agree pixel-for-pixel.
+
+### Delivery taxonomy
+
+```ts
+type Length   = 'full_toss' | 'yorker' | 'full' | 'good' | 'back_of_length' | 'short' | 'bouncer';
+type Line     = 'wide_off' | 'fifth_stump' | 'fourth_stump' | 'off_stump'
+              | 'middle' | 'leg_stump' | 'down_leg';
+type Variation = 'stock' | 'slower_ball' | 'cutter' | 'knuckle' | 'wide_yorker'
+              | 'arm_ball' | 'googly' | 'carrom' | 'slider' | 'topspinner' | 'doosra';
+type Intent   = 'attack_wicket' | 'contain' | 'deny_boundary' | 'set_up_next' | 'probe';
+```
+
+Intent is what separates a good decision from a lucky one. It's the field Phase 2 grades on.
+
+### Relations
+
+```ts
+relations.positionCoversZone:  Record<PositionId, ScoringZone[]>
+relations.deliveryInvitesShot: Record<DeliveryKey, ShotType[]>
+relations.shotScoresToZone:    Record<ShotType, ScoringZone[]>
+```
+
+Composed, these answer *does the field protect the zones this delivery invites?* A 6–3 off-side
+field with a leg-stump yorker is incoherent and code can say so with no model involved. Ship a
+light version in v0.1 as a non-blocking advisory chip.
+
+---
+
+## 7. Domain: rules engine (never a model)
+
+Pure, synchronous, exhaustively tested. Every rule carries provenance because playing conditions
+change:
+
+```ts
+interface Restriction {
+  id: string;
+  appliesTo: Format[];
+  predicate: (s: MatchState, f: FieldSetting) => Violation | null;
+  citation: string;        // 'ICC Men's T20I Playing Conditions, clause 28.x'
+  effectiveFrom: string;
+  verified: boolean;       // false until a human checked it against source
+}
+```
+
+Implement with `verified: false` until checked against the **current** ICC playing conditions.
+Do not assume the values below are current:
+
+- All formats: max **2** fielders behind square on the leg side.
+- All formats: max **5** fielders on the leg side.
+- T20: overs 1–6 max 2 outside the circle; overs 7–20 max 5 outside.
+- ODI: overs 1–10 max 2 outside; 11–40 max 4; 41–50 max 5.
+- Test / first-class: no circle restriction; both leg-side rules still apply.
+- Free hit: field may not change unless the batters changed ends.
+- Bowler and keeper excluded from all outside-circle counts.
+
+Violations render live — offending fielders get a sodium ring, the HUD chip turns amber and
+names the rule. The user is **never blocked** from dragging. They're told what's illegal and why.
+
+---
+
+## 8. Milestones
+
+Each is a paste-ready prompt plus acceptance criteria.
+
+### M0 — Monorepo scaffold
+
+> Set up a pnpm workspace with Turborepo containing `apps/mobile` (Expo, expo-router, TypeScript
+> strict), `packages/domain` (pure TS, zod only), `packages/tokens`. Configure NativeWind v4 in
+> the mobile app deriving its theme from `packages/tokens`. Install Reanimated 3, Moti,
+> react-native-gesture-handler, react-native-svg, react-native-mmkv, Zustand. Load Archivo,
+> Inter Tight and IBM Plex Mono via `@expo-google-fonts`. Add an ESLint `no-restricted-imports`
+> rule failing any import from outside `packages/domain` within that package. Set up Vitest for
+> domain and Maestro for mobile E2E.
+
+**Done when:** the app boots on a physical Android device; a debug screen renders every token
+swatch and all three fonts at display/body/mono sizes; `pnpm typecheck`, `pnpm test`, `pnpm lint`
+pass. **Confirm the Archivo Expanded width axis renders on Android here, not later.**
+
+### M1 — Ontology and geometry
+
+> Implement `packages/domain/ontology`: positions.ts with all ~46 canonical fielding positions,
+> deliveries.ts, phases.ts, conditions.ts, archetypes.ts, shots.ts, relations.ts. Then
+> `packages/domain/geometry` with isInsideCircle (capsule, not circle), nearestCanonicalPosition,
+> worldToScreen, and the LHB mirror. Test: mirror(mirror(p)) === p; capsule containment at the
+> join seam and both semicircle poles; nearest-position stability under 0.1m jitter;
+> worldToScreen round-trip.
+
+**Done when:** tests pass and a scratch screen plots all positions on an SVG that visually
+matches a real field diagram for both handednesses.
+
+### M2 — Rules engine
+
+> Implement `packages/domain/rules` per §7. One `Restriction` per rule with citation,
+> effectiveFrom, verified:false. `evaluateField(state, field)` returns Violation[].
+> `legalActions(state, field)` returns field changes producing no violation. Test both sides of
+> every boundary condition, keeper/bowler exclusion, free-hit lock.
+
+**Done when:** every restriction has a passing test at n and n+1 fielders, and
+`docs/OPEN_QUESTIONS.md` lists each unverified rule with the citation to check.
+
+### M3 — Scenario model and mobile builder
+
+> Implement `ScenarioState` (§9) plus encode/decode/hash/validate in `packages/domain/scenario`.
+> Build the mobile scenario builder. All derived values (phase, requiredRate, pressureIndex,
+> ballsLeft) are Zustand selectors, never stored fields. Ship 6 preset scenarios as JSON.
+
+**Mobile-specific constraint, and it's a hard one:** thirty configuration fields will not fit on
+a phone as a flat form. Structure it as:
+
+1. **Preset picker first.** Six named scenarios as full-bleed cards — Super Over, Day 5 rough,
+   new ball under lights, chase collapse, tailender on strike, powerplay vs left-hander. Most
+   users start and stop here.
+2. **"Adjust" reveals four grouped sheets** — Match, Conditions, Bowler, Batter. Each a bottom
+   sheet with 5–8 controls.
+3. **"Advanced" holds the rest** — ground dimensions, previous deliveries, field restrictions.
+
+Zero free-text inputs. Segmented controls, sliders, chips, cards.
+
+**Done when:** a scenario can be fully configured with one thumb; encode→decode round-trips; a
+deep link restores complete builder state.
+
+Two fields the original spec omitted that must be present:
+
+- **Ground dimensions**, straight and square independently.
+- **Bowler execution reliability**, 0–100. It teaches the single most important idea in the
+  product and needs no data. Give it prominence, not a bottom-of-Advanced slot.
+
+### M4 — 2D ground (the primary interaction surface)
+
+This is a **reversal** from the original spec, which had 3D as the hero and 2D as a mobile
+fallback. On a phone, orbiting a camera while dragging a fielder is two gestures fighting each
+other, and labels are illegible at any zoom showing the whole ground. 2D top-down is the primary
+surface on both platforms.
+
+> Build the 2D ground with react-native-svg: pitch, capsule inner circle, elliptical boundary,
+> fielder markers. Drag via react-native-gesture-handler with all animation in Reanimated
+> worklets on the UI thread — no bridge crossings per frame. Constrain to inside the boundary.
+> Pinch to zoom, two-finger pan. Labels use shortLabel by default, full label above a zoom
+> threshold. Live sodium restriction rings during drag. Haptic tick on crossing the circle.
+> Presets: save, name, load, duplicate, delete — Zustand persist to MMKV, versioned key.
+
+**Done when:** dragging holds 60fps on the mid-range Android target; illegal placement rings
+appear within one frame; 44pt hit areas verified; presets survive app restart.
+
+### M5 — Decision screen and log
+
+> Build the decision screen: scenario summary, static top-down field, bowler and batter cards,
+> conditions, Over Tape. Then "What would you do?" with the role-specific Decision union (§9) in
+> a bottom sheet. Chips and selectors only. On commit, write a DecisionRecord to MMKV.
+
+**Done when:** a decision can be made one-handed in under 20 seconds; the log survives restart;
+`msToDecide` is accurate.
+
+**Nothing reads this log yet. Build it anyway — it's the dataset for Phase 2 and the only way
+you'll learn where users disagree.**
+
+### M6 — Ship the mobile app and watch five people use it
+
+Not a coding task. Do it before anything below.
+
+### M7 — Web app
+
+> Create `apps/web` with Next.js App Router, Tailwind (theme from `packages/tokens`), Framer
+> Motion. Import `packages/domain` unchanged. Reimplement the screens for desktop. The 2D ground
+> ports nearly directly — react-native-svg and web SVG share element names and props, and
+> `worldToScreen` is already shared.
+
+**Done when:** zero domain changes were required to build the web app. If any were, the purity
+rule was violated somewhere and that's the bug to fix.
+
+### M8 — 3D presentation view (optional, may be cut)
+
+> Add a 3D ground as a *presentation* view only — swing the camera around a field already set,
+> or replay a delivery. Not an editing surface. Web: react-three-fiber. Mobile:
+> @react-three/fiber/native + expo-gl.
+
+Because 3D is non-load-bearing, poor Android frame rates cost a nice-to-have rather than the core
+loop. If it's rough on the target device, cut it without regret.
+
+---
+
+## 9. Schemas
+
+### ScenarioState
+
+```ts
+interface ScenarioState {
+  schemaVersion: 1;
+  id: string;
+
+  format: 'T20' | 'ODI' | 'TEST';
+  innings: 1 | 2 | 3 | 4;
+  over: number;                    // completed overs, 0-indexed
+  ball: 1|2|3|4|5|6;
+  score: number;
+  wicketsLost: number;             // 0–9
+  target: number | null;
+  ballsRemaining: number | null;
+
+  pitch: 'green' | 'hard' | 'flat' | 'dry' | 'dusty' | 'cracked';
+  pitchWear: number;               // 0–100
+  cloudCover: number;              // 0–100
+  dew: number;                     // 0–100
+  ballAgeOvers: number;
+  ballCondition: 'new' | 'scuffed' | 'soft' | 'reversing';
+  ground: { straightM: number; squareM: number };
+  lights: boolean;
+
+  bowler: {
+    type: 'right_fast' | 'left_fast' | 'right_fast_medium' | 'left_fast_medium'
+        | 'off_spin' | 'leg_spin' | 'left_orthodox' | 'left_wrist';
+    avgSpeedKph: number;
+    swingDeg: number; seamDeg: number; spinDeg: number;
+    executionReliability: number;   // 0–100
+    oversBowled: number; oversRemaining: number;
+  };
+  striker: {
+    handedness: 'RHB' | 'LHB';
+    archetype: 'anchor' | 'aggressor' | 'finisher' | 'allrounder' | 'tailender';
+    ballsFaced: number; runs: number;
+    aggression: number;             // 0–100
+  };
+  nonStriker: { handedness: 'RHB' | 'LHB'; archetype: Archetype };
+
+  field: FieldSetting;
+  lastDeliveries: DeliveryRecord[]; // ≤ 12
+}
+```
+
+Derived, never stored: `phase`, `requiredRate`, `currentRate`, `pressureIndex`, `ballsLeft`.
+
+### Decision
+
+```ts
+type Decision =
+  | { role: 'BOWLER'; delivery: { length: Length; line: Line; variation: Variation;
+        targetSpeedKph: number };
+      fieldChanges: FieldChange[]; intent: Intent; confidence: 1|2|3|4|5 }
+  | { role: 'BATTER'; shot: ShotType; targetZone: ScoringZone;
+      risk: 'low'|'medium'|'high'; intent: 'rotate'|'attack'|'defend'|'target_bowler' }
+  | { role: 'CAPTAIN'; bowlerId: string; fieldChanges: FieldChange[];
+      overPlan: Intent[]; matchupTarget: 'striker'|'nonstriker'|'neither' }
+  | { role: 'KEEPER'; standing: 'up'|'back'; depthM: number; angleDeg: number }
+  | { role: 'FIELDER'; positionId: PositionId; offsetM: Vec2; anticipation: ShotType[] };
+```
+
+### Suggestion (identical in Phase 1 and Phase 2)
+
+```ts
+interface Suggestion {
+  id: string;
+  option: {
+    length: Length; line: Line; variation: Variation;
+    intent: Intent; fieldChanges: FieldChange[];
+  };
+  because: string;      // one sentence: why this works here
+  unless: string;       // one sentence: when it fails
+  risk: 'low' | 'medium' | 'high';
+  source: 'model' | 'observed' | 'coach';
+  confidence: 'high' | 'contested';
+  contestedBy?: string;
+}
+```
+
+### DecisionRecord
+
+```ts
+interface DecisionRecord {
+  id: string; scenarioHash: string; role: Role;
+  decision: Decision;
+  suggestionsShown: Suggestion[];   // empty in v0.1
+  msToDecide: number;
+  createdAt: string;
+  schemaVersion: 1;
+}
+```
+
+---
+
+## 10. Phase 1 — the model layer
+
+### Where the endpoint lives
+
+A React Native app cannot host a Next route handler, and the web app doesn't exist yet at this
+point. So: **a standalone serverless function** (Vercel or Cloudflare Workers, one file) that
+both apps call. The API key lives in that function's environment and never reaches any client.
+
+`packages/domain/suggest/index.ts` exposes `getSuggestions`, which POSTs the scenario to an
+endpoint URL supplied at app init. Domain stays pure — it receives a transport function, it
+doesn't own one.
+
+Cache on `scenarioHash`. The quantised scenario space repeats heavily; cached responses are free,
+instant, and reviewable.
+
+### System prompt
+
+Use verbatim as the starting point. Every constraint exists for a reason.
+
+```
+You are a cricket tactics assistant inside a decision-training tool. Coaches and serious
+players use it. Your output is displayed as options for the user to choose between — you
+are never the answer.
+
+RETURN FORMAT
+Return ONLY a JSON array. No preamble, no markdown fences, no commentary.
+Each element:
+{
+  "id": "short_snake_case_identifier",
+  "option": {
+    "length": one of [full_toss, yorker, full, good, back_of_length, short, bouncer],
+    "line": one of [wide_off, fifth_stump, fourth_stump, off_stump, middle, leg_stump, down_leg],
+    "variation": one of [stock, slower_ball, cutter, knuckle, wide_yorker, arm_ball,
+                         googly, carrom, slider, topspinner, doosra],
+    "intent": one of [attack_wicket, contain, deny_boundary, set_up_next, probe],
+    "fieldChanges": [{"position": "<position_id>", "action": "push_back"|"bring_up"|"finer"|"squarer"}]
+  },
+  "because": "one sentence",
+  "unless": "one sentence",
+  "risk": "low"|"medium"|"high",
+  "confidence": "high"|"contested"
+}
+
+HARD RULES
+
+1. Return 2 or 3 options. Never 1. They must lead to genuinely different outcomes, not the
+   same ball described two ways. If you cannot find a second real option, return one option
+   with confidence "contested" and say in "unless" why the alternatives are worse.
+
+2. "unless" is mandatory and must be specific. State the concrete condition under which THIS
+   option fails. "Unless he executes badly" is not acceptable — say what the miss becomes and
+   where it goes. If you cannot name a specific failure mode, the option is not well enough
+   understood to suggest.
+
+3. Never state numbers. No expected runs, no percentages, no strike rates, no "8 times out of
+   10", no averages. You have no basis for any figure. Qualitative reasoning only.
+
+4. Use the bowler's executionReliability. Below 50, options requiring precision (yorker,
+   wide_yorker) must carry risk "high" and an "unless" naming what the miss becomes. Above 75,
+   precision options become viable that otherwise would not be.
+
+5. Use the ground dimensions. A short square boundary changes which side you can afford to
+   miss on. Say so when it drives the call.
+
+6. Respect the field that is set. Do not suggest a line the field does not protect without
+   including the fieldChange that fixes it.
+
+7. Banned phrasing: "bowl to your field", "hard lengths", "take pace off", "back of a length
+   into the pitch", "mix it up", "keep it simple", "execute your skills", "channel outside
+   off". These are commentary filler. Say the specific thing instead.
+
+8. If the scenario is genuinely ambiguous — several options equally defensible — mark all of
+   them "contested". This is a valid and useful answer. Do not manufacture a favourite.
+
+REASONING FRAME
+Work through, in order: what the batter is trying to do; what the field currently permits;
+what this bowler can reliably land; what the ground punishes. Then choose.
+```
+
+### Validation (server-side, before the response leaves the function)
+
+Reject and retry once if:
+- Not valid JSON matching the zod schema.
+- Fewer than 2 options and no `contested` flag.
+- Any `unless` under 8 words, or containing "execut" without naming a consequence.
+- Any string containing a digit followed by `%`, or "average", or "strike rate".
+- Any banned phrase from rule 7.
+
+On second failure, return a template response and log it. Never show an unvalidated response.
+
+### Logging (this is the point)
+
+Every response is written alongside its scenario. When you sit down for Phase 2 you're checking a
+list rather than starting blank: *"the model said wide yorker here — did anyone actually bowl
+that?"* Verifying is much faster than generating.
+
+---
+
+## 11. Phase 2 — the rules array
+
+### How the rules get made
+
+Not by writing what sounds right. That reproduces commentary slop in TypeScript.
+
+1. Open T20 matches. Skip to the 16th over.
+2. Pause before each ball. Write three lines in `docs/WATCH_NOTES.md`:
+
+```
+SITUATION: 18.4 | 22 off 8 | 3 down | set batter 34(19) | off-spinner | long-on + long-off back
+BOWLED:    wide yorker, missed, low full toss
+RESULT:    four through cover
+```
+
+3. Do 100 balls — roughly an hour per match with pausing, so 3–4 matches, one weekend.
+4. Group them. The same 6–7 situations recur. Those clusters are the rules, not the reverse.
+5. Take the clusters, not the deliveries, to a coach: *"I saw three different balls in this
+   situation. When is each right?"* That question produces the `unless` field.
+
+Target **25–30 rules**, not 100. A rule firing on 5% of scenarios and genuinely right beats
+twenty vague ones. Uncovered scenarios get "no strong prior here — what's your read?", which is
+an honest and good answer.
+
+### Shape
+
+```ts
+export const RULES: Rule[] = [
+  {
+    id: 'death_set_batter_deny_arc',
+    when: s =>
+      s.phase === 'death' &&
+      s.striker.ballsFaced > 10 &&
+      s.lastSixBalls.filter(b => b.runs >= 4).length >= 2,
+    then: {
+      length: 'yorker', line: 'wide_off', variation: 'stock',
+      intent: 'deny_boundary',
+      fieldChanges: [{ position: 'deep_point', action: 'push_back' }]
+    },
+    because: 'He is set and swinging through the line. Wide yorker removes the arc.',
+    unless: 'Execution is unreliable — a missed wide yorker is a low full toss outside off.',
+    risk: 'medium',
+    source: 'observed',
+    confidence: 'high',
+    evidence: {
+      observed: 14,
+      matches: ['IPL_2024_QF2', 'T20WC_2024_SF1'],
+      note: 'Bowled 14 of 19 times in this situation. The 5 exceptions were all spinners.'
+    }
+  },
+
+  {
+    id: 'death_set_batter_hard_length',
+    when: s => /* deliberately the same condition as above */,
+    then: { length: 'back_of_length', line: 'off_stump', variation: 'slower_ball',
+            intent: 'deny_boundary', fieldChanges: [] },
+    because: 'Takes pace off and makes him generate his own power.',
+    unless: 'Short square boundary — the pull becomes the easy option.',
+    risk: 'medium',
+    source: 'observed',
+    confidence: 'contested',
+    contestedBy: 'Fires alongside death_set_batter_deny_arc. Both are shown.',
+    evidence: { observed: 5, matches: ['BBL_2024_M12'],
+                note: 'Spinners and slower-ball specialists.' }
+  }
+];
+
+export const getSuggestions = async (s: ScenarioState): Promise<Suggestion[]> =>
+  RULES.filter(r => r.when(s)).map(toSuggestion);
+```
+
+**Rules 1 and 2 fire on the same condition and disagree. That is correct.** Never resolve
+conflicts in code. Show both — the tension is the lesson, and contested rules make the best
+scenarios.
+
+### Migration
+
+Implement the array, swap the body of `getSuggestions`, delete the serverless function. No UI
+change on either platform. If it's more than that, the interface leaked.
+
+---
+
+## 12. Anti-slop checklist
+
+Run against any suggestion output, either phase:
+
+- [ ] Would a coach disagree with it? If nobody could, it says nothing.
+- [ ] Does `unless` name a specific consequence, not a vague risk?
+- [ ] Does it reference at least one scenario field a generic answer would ignore — ground size,
+      execution reliability, current field, ball age?
+- [ ] Are there 2+ options that would actually play out differently?
+- [ ] Zero numbers?
+- [ ] Zero banned phrases?
+
+Anything failing this is filler, however fluent.
+
+---
+
+## 13. Not now
+
+- A stats pipeline. Blocked on the tests in §14.
+- A rating or Elo system. Needs a stable scoring function, which doesn't exist yet.
+- Multiplayer, auth, accounts.
+- 3D anything before M8.
+- The web app before the mobile app ships.
+- Any live model call before the mobile app ships. It will look like it works, which is exactly
+  the problem — fluent output creates the belief the product is finished before anyone has
+  checked whether it's right.
+
+---
+
+## 14. Two tests that decide the next year
+
+Both cheap, both boring, both worth more than a month of building.
+
+**Coach disagreement.** Five coaches, twenty scenarios, answering independently. If they agree,
+you can build toward an answer key. If they don't — and they probably won't — the product is
+permanently a distribution-and-debate tool, and single-answer UI is wrong.
+
+**Model vs. record.** Fifty held-out death-over deliveries. Compare what the model suggests
+against what elite bowlers actually did. Three outcomes, all useful: the model tracks real
+behaviour (skip the data layer); it doesn't (you've proved the product's reason to exist); or
+neither predicts anything (your scenario model is too coarse).
+
+Run both before committing to the next phase.
+
+---
+
+## 15. Open honesty
+
+Elite players and international coaches will not adopt this because it looks good. They have
+analysts, Hawk-Eye and CricViz. Realistic early users: serious club and age-group cricketers,
+coaching-badge candidates, academy coaches, analytics-literate fans. The path to boards runs
+through coach education pathways, not elite players.
+
+The defensible claim is narrow and true: existing tools describe what happened; none train the
+decision under time pressure with structured feedback.
+
+Retention will not come from the ground editor. That's the demo magnet. Retention comes from a
+daily set of scenarios with a rating — Phase 3, dependent on §14.

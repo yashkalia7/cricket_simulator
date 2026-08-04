@@ -1,0 +1,40 @@
+# M0 smoke test. Proves the app boots, fonts resolve and the token audit renders.
+#
+# Run:  pnpm e2e          (from the repo root, with a device or emulator attached)
+#
+# Maestro over Detox: far less setup, and this suite will never need Detox's
+# grey-box hooks — the interactions that matter (fielder drag, M4) are gestures
+# Maestro can drive directly.
+appId: com.cricket.tacticalsimulator
+---
+- launchApp:
+    clearState: true
+
+- assertVisible: 'Token audit'
+
+# The hero. If Archivo failed to load the text still renders, so this asserts
+# presence only — the width-axis question (OQ-001) is a human judgement on a
+# physical device, not something an assertion can settle.
+- assertVisible: '147'
+
+- assertVisible: 'OQ-001 · Archivo expanded axis'
+
+# Scroll the full audit. Fails if any section throws mid-render.
+- scrollUntilVisible:
+    element:
+      text: 'Colour — raw'
+    direction: DOWN
+
+- scrollUntilVisible:
+    element:
+      text: 'Touch target'
+    direction: DOWN
+
+- scrollUntilVisible:
+    element:
+      text: 'Motion constants'
+    direction: DOWN
+
+# Domain package resolved through the workspace and rendered a real value.
+- assertVisible:
+    text: '@cricket/domain  schemaVersion 1'

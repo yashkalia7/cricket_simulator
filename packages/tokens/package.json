@@ -1,0 +1,29 @@
+{
+  "name": "@cricket/tokens",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Design tokens as plain TS objects. Consumed by every app.",
+  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "react-native": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src --max-warnings 0",
+    "test": "echo \"@cricket/tokens has no behaviour to test\" && exit 0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

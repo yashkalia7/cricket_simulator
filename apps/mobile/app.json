@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Cricket Tactical Simulator",
+    "slug": "cricket-tactical-simulator",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "cricket",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "backgroundColor": "#07090B",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#07090B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cricket.tacticalsimulator"
+    },
+    "android": {
+      "package": "com.cricket.tacticalsimulator",
+      "adaptiveIcon": {
+        "backgroundColor": "#07090B"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-status-bar",
+      "expo-splash-screen"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

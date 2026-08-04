@@ -1,0 +1,63 @@
+# Patterns without a leading slash match at any depth, so these cover
+# apps/*/ and packages/*/ too — do not duplicate them per workspace.
+
+# Dependencies
+node_modules/
+.pnpm-store/
+*.tgz
+
+# Build output
+dist/
+build/
+web-build/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Caches
+.eslintcache
+*.cache
+
+# Expo
+.expo/
+.expo-shared/
+apps/mobile/android/
+apps/mobile/ios/
+*.orig.*
+
+# Signing material — never commit any of these
+*.jks
+*.p8
+*.p12
+*.key
+*.keystore
+*.mobileprovision
+
+# Maestro
+.maestro/**/*.log
+maestro-*.log
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Test output
+coverage/
+.nyc_output/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

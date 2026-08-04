@@ -1,0 +1,34 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# Expo/Metro does not understand pnpm's isolated symlink layout. The hoisted
+# linker is the configuration Expo documents for pnpm monorepos.
+#
+# pnpm 11 reads these from here, not from .npmrc — `node-linker=hoisted` in
+# .npmrc is silently ignored (`pnpm config get node-linker` returns undefined).
+nodeLinker: hoisted
+
+# React Native's peer ranges across the ecosystem are perpetually slightly out
+# of sync. `expo install` is the authority on which native versions are correct.
+strictPeerDependencies: false
+
+# pnpm 11 blocks postinstall scripts unless named here. Each entry is a
+# deliberate decision to let a dependency run code at install time.
+allowBuilds:
+  # Vitest's bundler. Its install script links the platform-native binary;
+  # without it, `pnpm test` cannot start.
+  esbuild: true
+  # Native resolver behind eslint-config-expo's import plugin. Its install
+  # script links the platform binary; without it, `pnpm lint` cannot resolve.
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - '@expo/cli@57.0.12'
+  - '@expo/router-server@57.0.5'
+  - '@expo/ui@57.0.9'
+  - expo-constants@57.0.9
+  - expo-linking@57.0.5
+  - expo-modules-core@57.0.9
+  - expo-router@57.0.10
+  - expo@57.0.10

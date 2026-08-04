@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    /*
+     * CommonJS, because the only consumer of `dist/` is a Node-side build tool:
+     * apps/mobile/tailwind.config.js, which `require()`s it. Metro and tsc both
+     * read `src/` directly (see the `react-native` and `types` fields in
+     * package.json), so editing a token does not require a rebuild for the app —
+     * only for Tailwind's generated utility classes.
+     */
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src"
+  }
+}

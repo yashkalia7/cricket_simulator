@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    /*
+     * No DOM lib. This package must not compile if someone reaches for
+     * `document`, `window` or `fetch` — the type error is a faster signal than
+     * the lint rule. Node types are deliberately absent for the same reason.
+     */
+    "lib": ["ES2022"],
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}
