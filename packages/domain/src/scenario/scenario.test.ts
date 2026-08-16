@@ -134,6 +134,13 @@ describe('derived values', () => {
     expect(phase(presetById('new_ball_lights')!)).toBe('powerplay');
   });
 
+  it('calls a Super Over the death, not a powerplay', () => {
+    // over 0 reads as a T20 powerplay unless superOver is honoured — the same
+    // trap as OQ-111, and it was visible in the HUD as "POWERPLAY".
+    expect(superOver.over).toBe(0);
+    expect(phase(superOver)).toBe('death');
+  });
+
   it('computes rates', () => {
     expect(currentRate(chase)).toBeCloseTo((148 / 106) * 6, 6);
     expect(requiredRate(chase)).toBeCloseTo((23 / 8) * 6, 6);

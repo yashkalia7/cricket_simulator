@@ -12,7 +12,13 @@ import { type ScenarioState } from './types';
 /** Legal balls bowled so far in the innings. */
 export const ballsBowled = (s: ScenarioState): number => s.over * 6 + s.ball;
 
-export const phase = (s: ScenarioState): Phase => phaseOf(s.format, s.over);
+/**
+ * A Super Over is over 0, which `phaseOf` would read as a powerplay — the same
+ * trap that made every legitimate Super Over field illegal (OQ-111). It is a
+ * one-over match played under the final over's conditions, so it is death.
+ */
+export const phase = (s: ScenarioState): Phase =>
+  s.superOver ? 'death' : phaseOf(s.format, s.over);
 
 /**
  * Balls left in the innings. `null` in a format with no fixed limit, or where

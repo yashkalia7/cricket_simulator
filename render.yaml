@@ -1,0 +1,54 @@
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# The web build is a **static site**. There is no server, no database and no
+# secrets: every scenario is compiled into the bundle, and the decision log
+# lives in the visitor's own localStorage (see apps/mobile/lib/storage.ts).
+# Nothing here needs an environment variable, and nothing should ever be added
+# that does — a key committed to a static bundle is a key given away.
+#
+# To deploy: Render dashboard → New → Blueprint → pick this repo.
+
+services:
+  - type: web
+    name: cricket-tactical-simulator
+    runtime: static
+    # Free plan; drop this line to use the account default.
+    plan: free
+    branch: main
+
+    buildCommand: |
+      corepack enable
+      pnpm install --frozen-lockfile
+      pnpm --filter @cricket/tokens build
+      pnpm --filter @cricket/mobile exec expo export --platform web
+
+    staticPublishPath: apps/mobile/dist
+
+    envVars:
+      # Matches the engines field in package.json. Expo SDK 54 needs >= 20.19.4.
+      - key: NODE_VERSION
+        value: 22.14.0
+      # pnpm is not on Render's default image path without corepack.
+      - key: PNPM_VERSION
+        value: 11.20.0
+
+    # expo-router is a single-page app: /scenario/death_chase is a client route,
+    # not a file on disk. Without this rewrite a deep link or a refresh 404s.
+    # Verified locally against a server that mimics exactly this behaviour.
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    headers:
+      # Content-addressed filenames (entry-<hash>.js) — safe to cache forever.
+      - path: /_expo/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
+      # The shell must not be cached, or a deploy never reaches anyone.
+      - path: /index.html
+        name: Cache-Control
+        value: no-cache

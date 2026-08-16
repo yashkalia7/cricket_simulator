@@ -81,6 +81,31 @@ an Expo account). Neither is needed yet.
 
 `pnpm e2e` (Maestro) also needs a real device or emulator plus a dev build.
 
+## Deploying the web build
+
+The web build is a **static site**. No server, no database, no secrets — every
+scenario is compiled into the bundle, and the decision log lives in the
+visitor's own `localStorage`. **There is nothing to configure and no credential
+to supply.**
+
+`render.yaml` is a Render blueprint: dashboard → New → Blueprint → pick this
+repo. It sets the build command, the publish path, an SPA rewrite (expo-router
+routes like `/scenario/death_chase` are client-side, so without the rewrite a
+refresh 404s) and cache headers.
+
+Any static host works — the equivalent settings are:
+
+| Setting | Value |
+|---|---|
+| Build command | `pnpm install --frozen-lockfile && pnpm --filter @cricket/tokens build && pnpm --filter @cricket/mobile exec expo export --platform web` |
+| Publish directory | `apps/mobile/dist` |
+| Rewrite | `/*` → `/index.html` |
+| Node version | ≥ 20.19.4 |
+
+**Do not add environment variables to this deployment.** When Phase 1 arrives
+(§10), the model API key belongs in a separate serverless function — never in a
+static bundle, where anyone can read it out of devtools.
+
 ## Where the rules are enforced
 
 The constraints in BUILD.md are not honour-system — each one has a mechanical
