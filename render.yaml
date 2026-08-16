@@ -16,8 +16,12 @@ services:
     plan: free
     branch: main
 
+    # pnpm is installed explicitly rather than via corepack: corepack has to
+    # fetch and verify the pinned version at build time, and a failure there
+    # fails the whole deploy for no benefit. The version matches the
+    # packageManager field in the root package.json.
     buildCommand: |
-      corepack enable
+      npm install -g pnpm@11.20.0
       pnpm install --frozen-lockfile
       pnpm --filter @cricket/tokens build
       pnpm --filter @cricket/mobile exec expo export --platform web
@@ -28,9 +32,6 @@ services:
       # Matches the engines field in package.json. Expo SDK 54 needs >= 20.19.4.
       - key: NODE_VERSION
         value: 22.14.0
-      # pnpm is not on Render's default image path without corepack.
-      - key: PNPM_VERSION
-        value: 11.20.0
 
     # expo-router is a single-page app: /scenario/death_chase is a client route,
     # not a file on disk. Without this rewrite a deep link or a refresh 404s.
