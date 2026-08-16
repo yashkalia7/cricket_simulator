@@ -125,6 +125,46 @@ half-written: delete it and install clean rather than retrying in place.
 
 ---
 
+## D-006 · NativeWind `darkMode: 'class'`
+
+**Date.** 2026-08-16 · **Milestone.** M0
+
+`app.json` pins `userInterfaceStyle: "dark"`, so Expo sets the colour scheme
+explicitly at startup. NativeWind's default `darkMode: 'media'` strategy rejects
+that and throws *"Cannot manually set color scheme, as dark mode is type
+'media'"* — a **full-screen error overlay**, not a console warning.
+
+Found by screenshotting the app rather than reading its text: a text dump of the
+page showed all the expected content, because the content was rendered *behind*
+the overlay. Only the image showed the app was unusable.
+
+**Decided.** `darkMode: 'class'` in `apps/mobile/tailwind.config.js`. This app is
+dark-first and uses no `dark:` variants at all — §5's palette *is* the dark
+palette — so the strategy only matters for silencing the clash.
+
+---
+
+## D-007 · Expo web is enabled, for demos only
+
+**Date.** 2026-08-16 · **Milestone.** M0 · **Deviates from** BUILD.md §13
+
+§13 lists "the web app before the mobile app ships" under **Not now**, and the
+real web client is M7 (Next.js, its own milestone). This is neither: it is
+`react-dom` + `react-native-web` so the *mobile* app can render in a browser.
+
+**Why it earns its place.** It is the only way to actually run this app from a
+machine with no Android SDK, no adb and no JDK. It caught D-006, which would
+otherwise have surfaced on a device. It makes screenshot and video capture
+possible, and gives a fast smoke-test loop that does not need a phone.
+
+**What it is not.** Not a substitute for the physical-Android check M0 requires
+(§4 item 4 is about 60fps on a mid-range device — a desktop browser proves
+nothing about that), and not the start of M7. If it ever costs anything to
+maintain, delete `react-dom`, `react-native-web` and the `web` block in
+`app.json`; nothing else depends on them.
+
+---
+
 ## Substitutions against BUILD.md
 
 | BUILD.md says | Shipped | Why |

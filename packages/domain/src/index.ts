@@ -28,3 +28,8 @@
 export const DOMAIN_SCHEMA_VERSION = 1 as const;
 
 export type DomainSchemaVersion = typeof DOMAIN_SCHEMA_VERSION;
+
+export * from './ontology';
+export * from './geometry';
+export * from './rules';
+export * from './scenario';

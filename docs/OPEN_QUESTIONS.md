@@ -93,6 +93,42 @@ against a diagram in the conditions rather than against another app.
 
 ---
 
+## M1 — Ontology
+
+### OQ-003 · §6's ring radii put ring positions outside the circle · `OPEN`
+
+**Found by** the M3 preset test, which asserts every shipped scenario has a
+legal field.
+
+§6's anchor table places `point`, `backward_point`, `square_leg` and
+`backward_square_leg` at **38m** from the striker's stumps. Squared off like
+that, they sit **38m from the pitch axis** — well outside the 27.43m circle. So
+a conventional "ring saving one" built from the §6 anchors is illegal in every
+limited-overs phase.
+
+`cover` (38m, 31.2m from axis) and `midwicket` (38m, 30.5m) are outside too.
+`mid_off` and `mid_on` at 33m are *inside*, because at 25°/335° they lie close
+to the pitch axis.
+
+**Why it matters.** Either the radii describe deeper-than-ring placements and
+the app needs separate in-ring anchors, or they are simply too deep. Until it is
+settled, the preset fields use the `short_*` anchors for in-circle fielders,
+which is defensible but is not what a coach would call a ring.
+
+**How to check.** Put the M1 field diagram in front of a coach and ask where a
+ring point saving one actually stands. Expect roughly 27–30m.
+
+### OQ-111 · Super Over fielding restrictions · `OPEN`
+
+Implemented as: a Super Over has **no powerplay**, and the limit is 5 outside
+the circle. Without this, `over: 0` reads as a T20 powerplay and every
+legitimate Super Over field is reported illegal.
+
+**To check.** ICC playing conditions, Super Over appendix — confirm the limit is
+the final-over allowance and that the leg-side rules apply unchanged.
+
+---
+
 ## Product
 
 ### OQ-201 · Coach disagreement · `OPEN`

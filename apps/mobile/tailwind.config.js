@@ -33,6 +33,19 @@ const mapPx = (obj) =>
 module.exports = {
   content: ['./app/**/*.{js,jsx,ts,tsx}', './components/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
+
+  /*
+   * 'class', not the default 'media'.
+   *
+   * app.json pins `userInterfaceStyle: "dark"`, which makes Expo set the colour
+   * scheme explicitly. NativeWind throws "Cannot manually set color scheme, as
+   * dark mode is type 'media'" when that happens under the media strategy — a
+   * full-screen error overlay, not a warning.
+   *
+   * This app is dark-first and uses no `dark:` variants at all (§5 — the palette
+   * IS the dark palette), so the strategy only matters for silencing that clash.
+   */
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
