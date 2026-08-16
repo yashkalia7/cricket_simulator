@@ -12,8 +12,9 @@ services:
   - type: web
     name: cricket-tactical-simulator
     runtime: static
-    # Free plan; drop this line to use the account default.
-    plan: free
+    # No `plan` field here. Plans apply to server-backed web services; a static
+    # site has no instance to size, and Render rejects the blueprint with
+    # "no such plan free for service type web" if one is set.
     branch: main
 
     # pnpm is installed explicitly rather than via corepack: corepack has to
