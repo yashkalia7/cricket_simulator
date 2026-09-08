@@ -1,135 +1,41 @@
-import {
-  FORMAT_LABELS,
-  PRESETS,
-  PRESET_PROMPTS,
-  chaseLabel,
-  overBallLabel,
-  phase,
-  PHASE_LABELS,
-  scoreLabel,
-  type ScenarioState,
-} from '@cricket/domain';
 import { color, semantic } from '@cricket/tokens';
-import { Link } from 'expo-router';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, ScrollView, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useDraft, type UserRole } from '../lib/draftStore';
+
 /**
- * Preset picker (BUILD.md §3, M3).
+ * Step 1 of the flow: which side of the ball are you on?
  *
- * "Preset picker first. Six named scenarios as full-bleed cards. Most users
- * start and stop here."
+ *   role → build the situation → read the field → commit
  *
- * Zero free-text inputs anywhere in this flow.
+ * The role comes first because it changes what the next screen asks for and
+ * what the answer looks like. A bowler picks a ball; a batter picks a shot.
  */
 
-function PresetCard({ scenario }: { scenario: ScenarioState }) {
-  const chase = chaseLabel(scenario);
-  const prompt = PRESET_PROMPTS[scenario.id];
+const ROLES: { role: UserRole; title: string; blurb: string }[] = [
+  {
+    role: 'BOWLER',
+    title: "I'm bowling",
+    blurb: 'Set the field, choose the ball, and see what it leaves open.',
+  },
+  {
+    role: 'BATTER',
+    title: "I'm batting",
+    blurb: 'Read where the gaps are, and pick a shot worth the risk.',
+  },
+];
 
-  return (
-    <Link href={{ pathname: '/scenario/[id]', params: { id: scenario.id } }} asChild>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${scenario.title}. ${scoreLabel(scenario)} after ${overBallLabel(scenario)}. ${prompt ?? ''}`}
-        style={({ pressed }) => ({
-          backgroundColor: semantic.card,
-          borderRadius: 16,
-          padding: 16,
-          marginBottom: 12,
-          borderWidth: 1,
-          borderColor: pressed ? semantic.accent : color.ink500,
-          opacity: pressed ? 0.92 : 1,
-        })}
-      >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text
-            style={{
-              color: color.chalk400,
-              fontFamily: 'IBMPlexMono_500Medium',
-              fontSize: 11,
-              letterSpacing: 1.2,
-            }}
-          >
-            {`${FORMAT_LABELS[scenario.format].toUpperCase()} · ${PHASE_LABELS[phase(scenario)].toUpperCase()}`}
-          </Text>
-          <Text
-            style={{
-              color: color.chalk400,
-              fontFamily: 'IBMPlexMono_400Regular',
-              fontSize: 12,
-            }}
-          >
-            {overBallLabel(scenario)}
-          </Text>
-        </View>
+export default function RolePicker() {
+  const router = useRouter();
+  const setRole = useDraft((s) => s.setRole);
 
-        <Text
-          style={{
-            color: color.chalk100,
-            fontFamily: 'Archivo_700Bold',
-            fontSize: 22,
-            marginTop: 10,
-            letterSpacing: -0.4,
-          }}
-        >
-          {scenario.title}
-        </Text>
+  const choose = (role: UserRole) => {
+    setRole(role);
+    router.push('/build');
+  };
 
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', marginTop: 8 }}>
-          <Text
-            style={{
-              color: color.chalk100,
-              fontFamily: 'Archivo_700Bold',
-              fontSize: 32,
-              letterSpacing: -1,
-            }}
-          >
-            {String(scenario.score)}
-          </Text>
-          <Text
-            style={{
-              color: color.chalk400,
-              fontFamily: 'Archivo_700Bold',
-              fontSize: 32,
-              letterSpacing: -1,
-            }}
-          >
-            {`/${scenario.wicketsLost}`}
-          </Text>
-          {chase && (
-            <Text
-              style={{
-                color: semantic.warning,
-                fontFamily: 'IBMPlexMono_500Medium',
-                fontSize: 13,
-                marginLeft: 12,
-              }}
-            >
-              {chase}
-            </Text>
-          )}
-        </View>
-
-        {prompt && (
-          <Text
-            style={{
-              color: color.chalk400,
-              fontFamily: 'InterTight_400Regular',
-              fontSize: 14,
-              lineHeight: 20,
-              marginTop: 10,
-            }}
-          >
-            {prompt}
-          </Text>
-        )}
-      </Pressable>
-    </Link>
-  );
-}
-
-export default function PresetPicker() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.screen }}>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
@@ -137,12 +43,12 @@ export default function PresetPicker() {
           style={{
             color: color.chalk100,
             fontFamily: 'Archivo_700Bold',
-            fontSize: 32,
-            marginTop: 20,
-            letterSpacing: -0.8,
+            fontSize: 34,
+            marginTop: 28,
+            letterSpacing: -0.9,
           }}
         >
-          Pick a situation
+          Cricket Tactical{'\n'}Simulator
         </Text>
         <Text
           style={{
@@ -150,16 +56,78 @@ export default function PresetPicker() {
             fontFamily: 'InterTight_400Regular',
             fontSize: 15,
             lineHeight: 22,
-            marginTop: 6,
-            marginBottom: 20,
+            marginTop: 10,
+            marginBottom: 28,
           }}
         >
-          Six real match states. Read it, commit to a call, see the trade-off.
+          Build the situation you are actually in, then commit to a call.
         </Text>
 
-        {PRESETS.map((scenario) => (
-          <PresetCard key={scenario.id} scenario={scenario} />
+        <Text
+          style={{
+            color: color.chalk400,
+            fontFamily: 'IBMPlexMono_500Medium',
+            fontSize: 11,
+            letterSpacing: 1.4,
+            marginBottom: 12,
+          }}
+        >
+          WHERE ARE YOU?
+        </Text>
+
+        {ROLES.map(({ role, title, blurb }) => (
+          <Pressable
+            key={role}
+            onPress={() => choose(role)}
+            accessibilityRole="button"
+            accessibilityLabel={`${title}. ${blurb}`}
+            style={({ pressed }) => ({
+              backgroundColor: semantic.card,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: pressed ? semantic.accent : color.ink500,
+              padding: 20,
+              marginBottom: 14,
+              minHeight: 110,
+              justifyContent: 'center',
+            })}
+          >
+            <Text
+              style={{ color: color.chalk100, fontFamily: 'Archivo_700Bold', fontSize: 26 }}
+            >
+              {title}
+            </Text>
+            <Text
+              style={{
+                color: color.chalk400,
+                fontFamily: 'InterTight_400Regular',
+                fontSize: 14,
+                lineHeight: 20,
+                marginTop: 8,
+              }}
+            >
+              {blurb}
+            </Text>
+          </Pressable>
         ))}
+
+        <Pressable
+          onPress={() => router.push('/presets')}
+          accessibilityRole="button"
+          accessibilityLabel="Start from a ready-made situation instead"
+          style={{ minHeight: 44, justifyContent: 'center', marginTop: 10 }}
+        >
+          <Text
+            style={{
+              color: color.chalk400,
+              fontFamily: 'InterTight_500Medium',
+              fontSize: 14,
+              textDecorationLine: 'underline',
+            }}
+          >
+            Or start from a ready-made situation
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

@@ -49,7 +49,7 @@ export const fieldOf = (
  */
 
 /** T20 death: five out, four saving one. */
-const DEATH_FIELD: readonly PositionId[] = [
+export const DEATH_FIELD: readonly PositionId[] = [
   'wicketkeeper',
   // out (5)
   'long_off',
@@ -65,7 +65,7 @@ const DEATH_FIELD: readonly PositionId[] = [
 ];
 
 /** Powerplay: two out, slip and gully in. */
-const POWERPLAY_FIELD: readonly PositionId[] = [
+export const POWERPLAY_FIELD: readonly PositionId[] = [
   'wicketkeeper',
   // out (2)
   'third_man',
@@ -81,7 +81,7 @@ const POWERPLAY_FIELD: readonly PositionId[] = [
 ];
 
 /** Test match, spinner, day five: bat-pads, a slip, one sweeper. */
-const DAY_FIVE_FIELD: readonly PositionId[] = [
+export const DAY_FIVE_FIELD: readonly PositionId[] = [
   'wicketkeeper',
   'first_slip',
   'leg_slip',
@@ -95,7 +95,7 @@ const DAY_FIVE_FIELD: readonly PositionId[] = [
 ];
 
 /** Powerplay, spin, two out square on either side. */
-const MIDDLE_FIELD: readonly PositionId[] = [
+export const MIDDLE_FIELD: readonly PositionId[] = [
   'wicketkeeper',
   // out (2)
   'deep_midwicket',
@@ -368,3 +368,16 @@ export const PRESET_PROMPTS: Record<string, string> = {
   tailender_on_strike: 'Tailender on strike, finisher at the other end. Deny the single?',
   powerplay_left_hander: 'Left-hander swinging, off-spinner into the breeze, two out.',
 };
+
+/**
+ * Field templates offered in the builder. A user picking a death field gets a
+ * real one, and can then drag it into whatever they actually mean.
+ */
+export const FIELD_TEMPLATES = {
+  powerplay: { label: 'Powerplay - two out', ids: POWERPLAY_FIELD },
+  middle: { label: 'Middle overs - spin', ids: MIDDLE_FIELD },
+  death: { label: 'Death - five out', ids: DEATH_FIELD },
+  catching: { label: 'Catching - slips and bat-pad', ids: DAY_FIVE_FIELD },
+} as const;
+
+export type FieldTemplateId = keyof typeof FIELD_TEMPLATES;
