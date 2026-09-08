@@ -11,6 +11,8 @@ import {
   PITCH_LABELS,
   PRESET_PROMPTS,
   ZONE_LABELS,
+  batterOptions,
+  bowlerRead,
   chaseLabel,
   coherenceGaps,
   evaluateField,
@@ -20,6 +22,8 @@ import {
   nearestCanonicalPosition,
   presetById,
   pressureIndex,
+  readField,
+  type BatterOption,
   type FieldSetting,
   type Intent,
   type Length,
@@ -34,6 +38,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Ground } from '../../components/Ground';
 import { OverTape } from '../../components/OverTape';
+import { FieldReadPanel } from '../../components/FieldRead';
+import { OptionCard } from '../../components/OptionCard';
 import { Card, Chip, Meter, Pill, SectionLabel, StatCell, StatGrid } from '../../components/primitives';
 import { recordDecision } from '../../lib/decisionLog';
 
@@ -93,6 +99,13 @@ export default function DecisionScreen() {
     });
   }, [scenario]);
 
+  /**
+   * Which side of the ball you are on. The Decision union (§9) has always had
+   * both roles; this is where the app finally offers the choice.
+   */
+  const [role, setRole] = useState<'BOWLER' | 'BATTER'>('BOWLER');
+  const [shot, setShot] = useState<BatterOption | null>(null);
+
   const [length, setLength] = useState<Length | null>(null);
   const [line, setLine] = useState<Line | null>(null);
   const [intent, setIntent] = useState<Intent | null>(null);
@@ -113,6 +126,18 @@ export default function DecisionScreen() {
         : [],
     [scenario, workingField],
   );
+
+  const read = useMemo(
+    () => readField(workingField),
+    [workingField],
+  );
+
+  const options = useMemo(
+    () => (scenario ? batterOptions({ ...scenario, field: workingField }) : []),
+    [scenario, workingField],
+  );
+
+  const execution = useMemo(() => (scenario ? bowlerRead(scenario) : null), [scenario]);
 
   const gaps = useMemo(() => {
     if (!scenario || !length || !line) return [];
@@ -135,7 +160,8 @@ export default function DecisionScreen() {
 
   const groundSize = Math.min(width - 24, 400);
   const chase = chaseLabel(scenario);
-  const ready = length !== null && line !== null && intent !== null;
+  const ready =
+    role === 'BOWLER' ? length !== null && line !== null && intent !== null : shot !== null;
   const shaky = scenario.bowler.executionReliability < 50;
 
   const commit = () => {
@@ -144,14 +170,28 @@ export default function DecisionScreen() {
     recordDecision({
       id: `${scenario.id}-${started}`,
       scenarioHash: hashScenario(scenario),
-      role: 'BOWLER',
-      decision: {
-        role: 'BOWLER',
-        delivery: { length, line, variation: 'stock', targetSpeedKph: scenario.bowler.avgSpeedKph },
-        fieldChanges: [],
-        intent,
-        confidence: 3,
-      },
+      role,
+      decision:
+        role === 'BOWLER'
+          ? {
+              role: 'BOWLER',
+              delivery: {
+                length: length!,
+                line: line!,
+                variation: 'stock',
+                targetSpeedKph: scenario.bowler.avgSpeedKph,
+              },
+              fieldChanges: [],
+              intent: intent!,
+              confidence: 3,
+            }
+          : {
+              role: 'BATTER',
+              shot: shot!.shot,
+              targetZone: shot!.targetZone,
+              risk: shot!.risk,
+              intent: 'attack',
+            },
       suggestionsShown: [],
       msToDecide: Date.now() - started,
       createdAt: new Date().toISOString(),
@@ -373,64 +413,169 @@ export default function DecisionScreen() {
         {/* ---- the decision ---------------------------------------------- */}
         <SectionLabel>What would you do?</SectionLabel>
 
-        <ChipGroup title="Length">
-          {LENGTHS.map((l) => (
-            <Chip
-              key={l}
-              label={LENGTH_LABELS[l]}
-              selected={length === l}
-              onPress={() => setLength(l)}
-            />
-          ))}
-        </ChipGroup>
-
-        <ChipGroup title="Line">
-          {LINES.map((l) => (
-            <Chip key={l} label={LINE_LABELS[l]} selected={line === l} onPress={() => setLine(l)} />
-          ))}
-        </ChipGroup>
-
-        <ChipGroup title="Intent">
-          {INTENTS.map((i) => (
-            <Chip
-              key={i}
-              label={INTENT_LABELS[i]}
-              selected={intent === i}
-              onPress={() => setIntent(i)}
-            />
-          ))}
-        </ChipGroup>
-
-        {/* Non-blocking coherence advisory (§6). */}
-        {gaps.length > 0 && (
-          <Card
-            style={{
-              backgroundColor: 'rgba(224,163,74,0.1)',
-              borderColor: 'rgba(224,163,74,0.3)',
-              marginTop: 12,
-            }}
-          >
-            <Text
+        {/* Role switch. Both roles were always in the Decision union (§9). */}
+        <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+          {(['BOWLER', 'BATTER'] as const).map((r) => (
+            <Pressable
+              key={r}
+              onPress={() => setRole(r)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: role === r }}
+              accessibilityLabel={`Answer as the ${r.toLowerCase()}`}
               style={{
-                color: semantic.warning,
-                fontFamily: 'InterTight_600SemiBold',
-                fontSize: 13,
-                lineHeight: 19,
+                flex: 1,
+                minHeight: 46,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: role === r ? color.ink700 : 'transparent',
+                borderWidth: 1,
+                borderColor: role === r ? semantic.accent : color.ink500,
+                borderRadius: 10,
+                marginRight: r === 'BOWLER' ? 8 : 0,
               }}
             >
-              {`This ball invites ${gaps.map((g) => ZONE_LABELS[g.zone]).join(', ')} — nobody there.`}
-            </Text>
-            <Text
-              style={{
-                color: color.chalk400,
-                fontFamily: 'InterTight_400Regular',
-                fontSize: 12,
-                marginTop: 4,
-              }}
-            >
-              Advisory only. Bowl it anyway if that is the plan.
-            </Text>
-          </Card>
+              <Text
+                style={{
+                  color: role === r ? color.chalk100 : color.chalk400,
+                  fontFamily: role === r ? 'InterTight_600SemiBold' : 'InterTight_400Regular',
+                  fontSize: 15,
+                }}
+              >
+                {r === 'BOWLER' ? "I'm bowling" : "I'm batting"}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {/* What the field says. Computed from the relation graph and the
+            geometry — no model is involved anywhere on this screen. */}
+        <View style={{ marginTop: 12 }}>
+          <FieldReadPanel read={read} />
+        </View>
+
+        {role === 'BATTER' ? (
+          <View style={{ marginTop: 14 }}>
+            {options.length === 0 ? (
+              <Card>
+                <Text
+                  style={{
+                    color: color.chalk100,
+                    fontFamily: 'InterTight_400Regular',
+                    fontSize: 14,
+                    lineHeight: 20,
+                  }}
+                >
+                  Every boundary is guarded. There is no free option here — you are choosing
+                  between ones and taking the bowler on.
+                </Text>
+              </Card>
+            ) : (
+              <>
+                <Text
+                  style={{
+                    color: color.chalk400,
+                    fontFamily: 'InterTight_400Regular',
+                    fontSize: 13,
+                    lineHeight: 19,
+                    marginBottom: 12,
+                  }}
+                >
+                  Three defensible options, low to high risk. None of them is marked best —
+                  that is your call to make and justify.
+                </Text>
+                {options.map((option) => (
+                  <OptionCard
+                    key={`${option.shot}-${option.targetZone}`}
+                    option={option}
+                    selected={shot?.shot === option.shot}
+                    onPress={() => setShot(option)}
+                  />
+                ))}
+              </>
+            )}
+          </View>
+        ) : (
+          <>
+            {execution && (
+              <Card style={{ marginTop: 14, marginBottom: 4 }}>
+                <Text
+                  style={{
+                    color: execution.precisionViable ? color.chalk100 : semantic.warning,
+                    fontFamily: 'InterTight_400Regular',
+                    fontSize: 13.5,
+                    lineHeight: 19,
+                  }}
+                >
+                  {execution.executionNote}
+                </Text>
+              </Card>
+            )}
+
+            <ChipGroup title="Length">
+              {LENGTHS.map((l) => (
+                <Chip
+                  key={l}
+                  label={LENGTH_LABELS[l]}
+                  selected={length === l}
+                  onPress={() => setLength(l)}
+                />
+              ))}
+            </ChipGroup>
+
+            <ChipGroup title="Line">
+              {LINES.map((l) => (
+                <Chip
+                  key={l}
+                  label={LINE_LABELS[l]}
+                  selected={line === l}
+                  onPress={() => setLine(l)}
+                />
+              ))}
+            </ChipGroup>
+
+            <ChipGroup title="Intent">
+              {INTENTS.map((i) => (
+                <Chip
+                  key={i}
+                  label={INTENT_LABELS[i]}
+                  selected={intent === i}
+                  onPress={() => setIntent(i)}
+                />
+              ))}
+            </ChipGroup>
+
+            {/* Non-blocking coherence advisory (§6). */}
+            {gaps.length > 0 && (
+              <Card
+                style={{
+                  backgroundColor: 'rgba(224,163,74,0.1)',
+                  borderColor: 'rgba(224,163,74,0.3)',
+                  marginTop: 12,
+                }}
+              >
+                <Text
+                  style={{
+                    color: semantic.warning,
+                    fontFamily: 'InterTight_600SemiBold',
+                    fontSize: 13,
+                    lineHeight: 19,
+                  }}
+                >
+                  {`This ball invites ${gaps.map((g) => ZONE_LABELS[g.zone]).join(', ')} — nobody there.`}
+                </Text>
+                <Text
+                  style={{
+                    color: color.chalk400,
+                    fontFamily: 'InterTight_400Regular',
+                    fontSize: 12,
+                    marginTop: 4,
+                  }}
+                >
+                  Advisory only. Bowl it anyway if that is the plan.
+                </Text>
+              </Card>
+            )}
+          </>
         )}
 
         {/* Primary action, bottom third. */}
@@ -457,7 +602,13 @@ export default function DecisionScreen() {
               fontSize: 16,
             }}
           >
-            {committed ? 'Logged ✓' : ready ? 'Commit' : 'Pick length, line and intent'}
+            {committed
+              ? 'Logged ✓'
+              : ready
+                ? 'Commit'
+                : role === 'BOWLER'
+                  ? 'Pick length, line and intent'
+                  : 'Pick a shot'}
           </Text>
         </Pressable>
 
