@@ -66,7 +66,7 @@ export default function Analysis() {
   const [length, setLength] = useState<Length | null>(null);
   const [line, setLine] = useState<Line | null>(null);
   const [intent, setIntent] = useState<Intent | null>(null);
-  const [committed, setCommitted] = useState(false);
+  const [committed, setCommitted] = useState<null | 'stored' | 'local-only'>(null);
 
   const moveFielder = useCallback((fielderId: string, to: Vec2) => {
     setField((current) => {
@@ -104,10 +104,10 @@ export default function Analysis() {
   const ready =
     role === 'BOWLER' ? length !== null && line !== null && intent !== null : shot !== null;
 
-  const commit = () => {
+  const commit = async () => {
     if (!ready) return;
     const started = openedAt.current ?? Date.now();
-    recordDecision({
+    const sync = await recordDecision({
       id: `custom-${started}`,
       scenarioHash: hashScenario(scenario),
       role,
@@ -136,8 +136,8 @@ export default function Analysis() {
       msToDecide: Date.now() - started,
       createdAt: new Date().toISOString(),
       schemaVersion: 1,
-    });
-    setCommitted(true);
+    }, scenario);
+    setCommitted(sync);
   };
 
   const groundSize = Math.min(width - 24, 400);
@@ -391,7 +391,7 @@ export default function Analysis() {
 
         <Pressable
           onPress={commit}
-          disabled={!ready || committed}
+          disabled={!ready || committed !== null}
           accessibilityRole="button"
           accessibilityLabel="Commit this decision"
           style={{
@@ -411,7 +411,9 @@ export default function Analysis() {
             }}
           >
             {committed
-              ? 'Logged ✓'
+              ? committed === 'stored'
+                ? 'Saved to the log ✓'
+                : 'Saved on this device only'
               : ready
                 ? 'Commit'
                 : role === 'BOWLER'

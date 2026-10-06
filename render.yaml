@@ -1,56 +1,55 @@
 # Render blueprint — https://render.com/docs/blueprint-spec
 #
-# The web build is a **static site**. There is no server, no database and no
-# secrets: every scenario is compiled into the bundle, and the decision log
-# lives in the visitor's own localStorage (see apps/mobile/lib/storage.ts).
-# Nothing here needs an environment variable, and nothing should ever be added
-# that does — a key committed to a static bundle is a key given away.
+# This was a static site. It is now a Node **web service**, because three things
+# need a server that a static bundle cannot have:
 #
-# To deploy: Render dashboard → New → Blueprint → pick this repo.
+#   - the OpenAI key, which must never reach a browser
+#   - the password gate, which is only real if the server enforces it
+#   - the decision log, which is only a shared dataset if it leaves the device
+#
+# The service serves the built web app *and* the API from one origin, so the
+# session cookie is first-party and there is no CORS.
+#
+# SECRETS ARE NOT IN THIS FILE. `sync: false` means Render prompts for the value
+# and stores it encrypted; it is never committed. This repo is public.
 
 services:
   - type: web
     name: cricket-tactical-simulator
-    runtime: static
-    # No `plan` field here. Plans apply to server-backed web services; a static
-    # site has no instance to size, and Render rejects the blueprint with
-    # "no such plan free for service type web" if one is set.
+    runtime: node
+    plan: free
     branch: main
 
-    # pnpm is installed explicitly rather than via corepack: corepack has to
-    # fetch and verify the pinned version at build time, and a failure there
-    # fails the whole deploy for no benefit. The version matches the
-    # packageManager field in the root package.json.
     buildCommand: |
       npm install -g pnpm@11.20.0
       pnpm install --frozen-lockfile
       pnpm --filter @cricket/tokens build
       pnpm --filter @cricket/mobile exec expo export --platform web
+      pnpm --filter @cricket/server build
 
-    staticPublishPath: apps/mobile/dist
+    startCommand: node apps/server/dist/server.js
+
+    healthCheckPath: /api/health
 
     envVars:
-      # Matches the engines field in package.json. Expo SDK 54 needs >= 20.19.4.
       - key: NODE_VERSION
         value: 22.14.0
+      - key: NODE_ENV
+        value: production
+      # Where the built web app lives, relative to the repo root at runtime.
+      - key: STATIC_DIR
+        value: apps/mobile/dist
 
-    # expo-router is a single-page app: /scenario/death_chase is a client route,
-    # not a file on disk. Without this rewrite a deep link or a refresh 404s.
-    # Verified locally against a server that mimics exactly this behaviour.
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-
-    headers:
-      # Content-addressed filenames (entry-<hash>.js) — safe to cache forever.
-      - path: /_expo/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-      - path: /assets/*
-        name: Cache-Control
-        value: public, max-age=31536000, immutable
-      # The shell must not be cached, or a deploy never reaches anyone.
-      - path: /index.html
-        name: Cache-Control
-        value: no-cache
+      # ---- set these in the dashboard; never in the repo ------------------
+      # The landing-page password, shared by the team.
+      - key: APP_PASSWORD
+        sync: false
+      # Supabase Postgres connection string (use the pooler URI).
+      - key: DATABASE_URL
+        sync: false
+      # Absent key is not a failure: /api/suggest falls back to the
+      # deterministic options, so the app still works without it.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini

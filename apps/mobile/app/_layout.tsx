@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { PasswordGate } from '../components/PasswordGate';
 import { FONT_MAP } from '../lib/fonts';
 
 // Prints the full stack on the device instead of a truncated one-liner.
@@ -37,12 +38,15 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: semantic.screen }}>
       <SafeAreaProvider>
         <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: semantic.screen },
-          }}
-        />
+        {/* Nothing renders until the server says the session is valid. */}
+        <PasswordGate>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: semantic.screen },
+            }}
+          />
+        </PasswordGate>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
