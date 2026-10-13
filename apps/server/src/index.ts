@@ -132,7 +132,13 @@ guarded.post('/decisions', async (c) => {
     author: session?.who ?? null,
   });
 
-  return c.json({ stored: true, total: await store.count() });
+  // `durable` is the honest bit: a memory store accepts the write and loses
+  // it on restart, and the client must not call that "saved to the log".
+  return c.json({
+    stored: true,
+    durable: store.kind === 'postgres',
+    total: await store.count(),
+  });
 });
 
 guarded.get('/decisions', async (c) => {

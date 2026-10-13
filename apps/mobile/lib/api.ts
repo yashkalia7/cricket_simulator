@@ -66,8 +66,37 @@ export interface StoredDecisionRow {
   author: string | null;
 }
 
-export const postDecision = (payload: unknown): Promise<{ stored: boolean; total: number }> =>
+export const postDecision = (
+  payload: unknown,
+): Promise<{ stored: boolean; durable: boolean; total: number }> =>
   request('/api/decisions', { method: 'POST', body: JSON.stringify(payload) });
+
+export interface SuggestionOption {
+  id: string;
+  option: { length: string; line: string; variation: string; intent: string };
+  because: string;
+  unless: string;
+  risk: 'low' | 'medium' | 'high';
+  confidence: 'high' | 'contested';
+}
+
+export interface SuggestResponse {
+  /** 'model' when OpenAI answered and passed validation; 'computed' otherwise. */
+  source: 'model' | 'computed';
+  options: SuggestionOption[];
+  cached: boolean;
+  /** Why a model answer was refused, when it was. */
+  rejected?: string[];
+}
+
+export const requestSuggestions = (
+  scenario: unknown,
+  scenarioHash: string,
+): Promise<SuggestResponse> =>
+  request('/api/suggest', {
+    method: 'POST',
+    body: JSON.stringify({ scenario, scenarioHash }),
+  });
 
 export const listDecisions = (): Promise<{ decisions: StoredDecisionRow[]; total: number }> =>
   request('/api/decisions?limit=100');

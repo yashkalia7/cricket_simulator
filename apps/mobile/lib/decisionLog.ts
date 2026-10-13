@@ -24,7 +24,7 @@ export const readDecisions = (): DecisionRecord[] => {
   }
 };
 
-export type DecisionSync = 'stored' | 'local-only';
+export type DecisionSync = 'stored' | 'memory-only' | 'local-only';
 
 /**
  * Write locally first, then to the server.
@@ -42,8 +42,9 @@ export const recordDecision = async (
   storage().set(KEY, JSON.stringify(all));
 
   try {
-    await postDecision({ ...record, scenario });
-    return 'stored';
+    const result = await postDecision({ ...record, scenario });
+    // The server accepts the write either way; only Postgres keeps it.
+    return result.durable ? 'stored' : 'memory-only';
   } catch {
     return 'local-only';
   }

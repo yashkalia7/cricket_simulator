@@ -29,7 +29,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { requestSuggestions, type SuggestResponse } from '../lib/api';
 import { FieldReadPanel } from '../components/FieldRead';
+import { Suggestions } from '../components/Suggestions';
 import { Ground } from '../components/Ground';
 import { OptionCard } from '../components/OptionCard';
 import { Card, Chip, Pill, SectionLabel } from '../components/primitives';
@@ -66,7 +68,10 @@ export default function Analysis() {
   const [length, setLength] = useState<Length | null>(null);
   const [line, setLine] = useState<Line | null>(null);
   const [intent, setIntent] = useState<Intent | null>(null);
-  const [committed, setCommitted] = useState<null | 'stored' | 'local-only'>(null);
+  const [committed, setCommitted] = useState<null | 'stored' | 'memory-only' | 'local-only'>(null);
+  const [advice, setAdvice] = useState<SuggestResponse | null>(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [adviceError, setAdviceError] = useState<string | null>(null);
 
   const moveFielder = useCallback((fielderId: string, to: Vec2) => {
     setField((current) => {
@@ -138,6 +143,18 @@ export default function Analysis() {
       schemaVersion: 1,
     }, scenario);
     setCommitted(sync);
+
+    // Only now. The app asks, you answer, and the options come after — showing
+    // them first would make this an answer key rather than a decision gym (§1).
+    setAdviceLoading(true);
+    setAdviceError(null);
+    try {
+      setAdvice(await requestSuggestions(scenario, hashScenario(scenario)));
+    } catch {
+      setAdviceError('Could not reach the coach. Your decision is still saved.');
+    } finally {
+      setAdviceLoading(false);
+    }
   };
 
   const groundSize = Math.min(width - 24, 400);
@@ -413,7 +430,9 @@ export default function Analysis() {
             {committed
               ? committed === 'stored'
                 ? 'Saved to the log ✓'
-                : 'Saved on this device only'
+                : committed === 'memory-only'
+                  ? 'Saved — but the database is not connected'
+                  : 'Saved on this device only'
               : ready
                 ? 'Commit'
                 : role === 'BOWLER'
@@ -421,6 +440,9 @@ export default function Analysis() {
                   : 'Pick a shot'}
           </Text>
         </Pressable>
+
+        {/* The answer, after the commitment — never before it. */}
+        <Suggestions loading={adviceLoading} result={advice} error={adviceError} />
       </ScrollView>
     </SafeAreaView>
   );

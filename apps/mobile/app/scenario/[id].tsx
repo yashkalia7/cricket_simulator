@@ -109,7 +109,7 @@ export default function DecisionScreen() {
   const [length, setLength] = useState<Length | null>(null);
   const [line, setLine] = useState<Line | null>(null);
   const [intent, setIntent] = useState<Intent | null>(null);
-  const [committed, setCommitted] = useState<null | 'stored' | 'local-only'>(null);
+  const [committed, setCommitted] = useState<null | 'stored' | 'memory-only' | 'local-only'>(null);
 
   const violations = useMemo(
     () =>
