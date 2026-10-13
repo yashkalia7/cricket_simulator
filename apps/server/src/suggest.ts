@@ -101,7 +101,29 @@ C. Each option may carry "fieldChanges": moves that make that ball work. Use
 
 D. Use the recent balls. A batter who has just hit two boundaries in three is
    a different problem from one who has played out three dots, and the sequence
-   is given to you. Refer to what actually happened.`;
+   is given to you. Refer to what actually happened.
+
+E. GROUND EVERY ANSWER IN THIS POSITION. Each option, and onYourCall, must name
+   at least one thing that is true of THIS scenario and would be absent from a
+   textbook answer: a fielder by the name given, the dew, the short boundary,
+   the ball's condition, the batter's type, or a specific delivery from the
+   recent sequence. An option that names none of these is rejected and you will
+   be asked again.
+
+   Too generic — rejected:
+     "A good length on the fourth stump makes it difficult for the batter to
+      commit to a big shot while still containing runs."
+     Nothing there is about this match. It would be equally true anywhere.
+
+   Specific — accepted:
+     "Point is empty and short cover is saving one, so the cut is the free shot
+      and he has already taken a six off the leg stump this over. Going wider
+      moves the ball away from the arc he just used."
+
+F. Write for a coach who is in a hurry but wants the reasoning, not a slogan.
+   Two sentences in "because" is normal; one is fine when it is genuinely
+   complete. Do not restate the delivery you just named — explain what it does
+   to this batter, in this over, against this field.`;
 
 const BANNED = [
   'bowl to your field',
@@ -218,9 +240,45 @@ export const groundingFor = (scenario: ScenarioState, decision: unknown): string
   return lines.join('\n');
 };
 
+/**
+ * The specifics a generic answer would ignore (§12, item 3).
+ *
+ * "Would a coach disagree with it? If nobody could, it says nothing." An answer
+ * that never names a fielder, a condition or what just happened is commentary,
+ * however fluent — so an option that touches none of these is rejected and the
+ * model is asked again.
+ */
+export const groundedTerms = (scenario: ScenarioState): string[] => {
+  const terms: string[] = [];
+
+  for (const fielder of scenario.field.fielders) {
+    if (fielder.role === 'fielder') terms.push(labelOf(fielder.positionId));
+  }
+  for (const zone of SCORING_ZONES) terms.push(ZONE_LABELS[zone].toLowerCase());
+
+  terms.push(scenario.striker.archetype, scenario.striker.handedness.toLowerCase());
+  terms.push(scenario.bowler.type.replace(/_/g, ' '), scenario.bowler.type.replace(/_/g, '-'));
+  terms.push(scenario.pitch, scenario.ballCondition);
+
+  if (scenario.dew > 40) terms.push('dew', 'wet', 'slippery', 'skid');
+  if (scenario.lights) terms.push('lights', 'night');
+  if (scenario.ground.squareM < 62) terms.push('short square', 'square boundary', 'short boundary');
+  if (scenario.bowler.executionReliability < 50) terms.push('execution', 'reliab', 'miss');
+  if (scenario.lastDeliveries.some((d) => d.runs >= 6)) terms.push('six', 'maximum');
+  if (scenario.lastDeliveries.some((d) => d.runs === 4)) terms.push('four', 'boundary');
+  if (scenario.lastDeliveries.some((d) => d.wicket)) terms.push('wicket');
+  if (scenario.target !== null) terms.push('chase', 'chasing', 'required', 'target');
+
+  return [...new Set(terms.filter((t) => t.length > 2))];
+};
+
 /** §10's validation. Reject and retry once; never show an unvalidated response. */
-export const validateOptions = (options: ModelOption[]): string[] => {
+export const validateOptions = (
+  options: ModelOption[],
+  scenario?: ScenarioState,
+): string[] => {
   const problems: string[] = [];
+  const grounded = scenario ? groundedTerms(scenario) : [];
 
   if (options.length < 2 && !options.every((o) => o.confidence === 'contested')) {
     problems.push('fewer than 2 options and not marked contested');
@@ -238,6 +296,13 @@ export const validateOptions = (options: ModelOption[]): string[] => {
     }
     for (const phrase of BANNED) {
       if (text.includes(phrase)) problems.push(`banned phrase: "${phrase}"`);
+    }
+
+    // §12 item 3: it must engage with THIS position, not cricket in general.
+    if (grounded.length > 0 && !grounded.some((term) => text.includes(term))) {
+      problems.push(
+        `option "${o.id}" names nothing specific to this scenario — no fielder, condition or recent ball`,
+      );
     }
 
     if (!(LENGTHS as readonly string[]).includes(o.option.length)) {
@@ -409,7 +474,7 @@ export const suggest = async (
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const { onYourCall, options } = await callOpenAi(scenario, decision, apiKey, model);
-      const problems = validateOptions(options);
+      const problems = validateOptions(options, scenario);
       if (problems.length === 0) return { source: 'model', onYourCall, options };
       // §10: reject and retry once. On the second failure, fall back.
       if (attempt === 1) return fallback(problems);

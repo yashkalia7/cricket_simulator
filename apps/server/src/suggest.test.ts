@@ -1,7 +1,7 @@
 import { PRESETS } from '@cricket/domain';
 import { describe, expect, it } from 'vitest';
 
-import { groundingFor, validateOptions, type ModelOption } from './suggest';
+import { groundedTerms, groundingFor, validateOptions, type ModelOption } from './suggest';
 
 const ok: ModelOption = {
   id: 'wide_yorker_deny_arc',
@@ -100,5 +100,46 @@ describe('groundingFor', () => {
     for (const preset of PRESETS) {
       expect(groundingFor(preset, null)).not.toMatch(/sk-|Bearer |password/i);
     }
+  });
+});
+
+describe('§12 item 3 — grounding in this position', () => {
+  const scenario = PRESETS[1]!;
+
+  it('lists terms a generic answer would never use', () => {
+    const terms = groundedTerms(scenario);
+    expect(terms).toContain('deep midwicket');
+    expect(terms).toContain('finisher');
+    // Chase collapse has dew, a short square boundary and a six last over.
+    expect(terms).toContain('dew');
+    expect(terms).toContain('six');
+  });
+
+  it('rejects an option that could have been written about any match', () => {
+    const generic = [
+      { ...ok, id: 'a', because: 'A good length makes it hard to commit to a big shot.' },
+      { ...ok, id: 'b', because: 'Bowling straight keeps the stumps in play throughout.' },
+    ];
+    expect(validateOptions(generic, scenario).join(' ')).toContain('names nothing specific');
+  });
+
+  it('accepts an option that names a fielder in this field', () => {
+    const specific = [
+      { ...ok, id: 'a', because: 'Point is empty and short cover is saving one, so the cut is free.' },
+      { ...ok, id: 'b', because: 'Deep midwicket is on the rope, so the slog has to clear him.' },
+    ];
+    expect(validateOptions(specific, scenario)).toEqual([]);
+  });
+
+  it('accepts an option that names a condition', () => {
+    const specific = [
+      { ...ok, id: 'a', because: 'The dew is making the ball skid on, so the slower one grips less.' },
+      { ...ok, id: 'b', because: 'The square boundary is short, so the pull is the cheaper miss.' },
+    ];
+    expect(validateOptions(specific, scenario)).toEqual([]);
+  });
+
+  it('still passes everything when no scenario is supplied', () => {
+    expect(validateOptions([ok, { ...ok, id: 'b' }])).toEqual([]);
   });
 });
