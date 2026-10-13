@@ -61,7 +61,21 @@ create table if not exists suggestion_cache (
 
 export const createPostgresStore = (url: string): Store => {
   // Supabase requires TLS; `prepare: false` is needed behind its pooler.
-  const sql = postgres(url, { ssl: 'require', prepare: false, max: 4 });
+  let sql: ReturnType<typeof postgres>;
+  try {
+    sql = postgres(url, { ssl: 'require', prepare: false, max: 4 });
+  } catch (cause) {
+    // The common cause is a password containing %, ? or @ pasted raw into the
+    // URI: `%j!` is not valid percent-encoding, so the parser throws
+    // "URI malformed" with a stack trace that says nothing about passwords.
+    throw new Error(
+      'DATABASE_URL could not be parsed. If your database password contains % ? @ # or /, ' +
+        'either percent-encode it (% becomes %25, ? becomes %3F, @ becomes %40) or reset it ' +
+        'to letters and numbers only. Use the Transaction pooler URI (port 6543) — Supabase ' +
+        'direct connections are IPv6-only and Render usually cannot reach them.',
+      { cause },
+    );
+  }
 
   return {
     kind: 'postgres',
