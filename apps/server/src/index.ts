@@ -27,9 +27,35 @@ import { suggest } from './suggest';
 
 const config = loadConfig();
 
-const store: Store = config.databaseUrl
-  ? createPostgresStore(config.databaseUrl)
-  : createMemoryStore();
+/**
+ * Postgres if it is reachable, memory if it is not.
+ *
+ * A bad connection string used to kill the process, so a typo in an env var
+ * took the entire site down — the app, the gate, everything. It degrades now:
+ * the site serves, /api/health says plainly that the database is not connected
+ * and why, and nothing pretends a decision was durably stored.
+ */
+let store: Store = createMemoryStore();
+let storeError: string | null = null;
+
+if (config.databaseUrl) {
+  try {
+    const pg = createPostgresStore(config.databaseUrl);
+    await pg.init();
+    store = pg;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    storeError = /ENETUNREACH/.test(message)
+      ? 'Cannot reach the database over IPv6. Use the Supabase *Transaction pooler* URI ' +
+        '(host contains pooler.supabase.com, port 6543) — Render has no IPv6 egress, so the ' +
+        'direct connection on 5432 can never work.'
+      : message.slice(0, 300);
+    process.stdout.write(`DATABASE NOT CONNECTED: ${storeError}
+`);
+  }
+} else {
+  storeError = 'DATABASE_URL is not set.';
+}
 
 const app = new Hono();
 app.use('*', logger());
@@ -42,6 +68,8 @@ app.get('/api/health', async (c) =>
   c.json({
     ok: true,
     store: store.kind,
+    // Present whenever decisions are NOT being durably stored.
+    storeError,
     decisions: await store.count(),
     model: config.openAiKey ? config.openAiModel : null,
   }),
@@ -221,8 +249,6 @@ app.get('*', async (c) => {
 });
 
 /* ------------------------------------------------------------------------- */
-
-await store.init();
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   process.stdout.write(
