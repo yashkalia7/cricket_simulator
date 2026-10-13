@@ -51,5 +51,8 @@ services:
       # deterministic options, so the app still works without it.
       - key: OPENAI_API_KEY
         sync: false
+      # gpt-4o-mini produced fluent but generic answers that ignored the
+      # position it was given. Costlier per call, but caching on
+      # scenario+decision means a repeated situation costs nothing.
       - key: OPENAI_MODEL
-        value: gpt-4o-mini
+        value: gpt-4o

@@ -45,7 +45,7 @@ export const loadConfig = (): Config => {
     sessionSecret: createHash('sha256').update(`cricket-session:${appPassword}`).digest('hex'),
     databaseUrl: process.env.DATABASE_URL?.trim() || null,
     openAiKey: process.env.OPENAI_API_KEY?.trim() || null,
-    openAiModel: process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini',
+    openAiModel: process.env.OPENAI_MODEL?.trim() || 'gpt-4o',
     staticDir: process.env.STATIC_DIR?.trim() || '../mobile/dist',
     isProduction: process.env.NODE_ENV === 'production',
   };
