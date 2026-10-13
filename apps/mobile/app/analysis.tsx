@@ -112,6 +112,11 @@ export default function Analysis() {
   const commit = async () => {
     if (!ready) return;
     const started = openedAt.current ?? Date.now();
+    const committedDecision =
+      role === 'BOWLER'
+        ? { role, length, line, variation: 'stock', intent }
+        : { role, shot: shot!.shot, targetZone: shot!.targetZone, risk: shot!.risk };
+
     const sync = await recordDecision({
       id: `custom-${started}`,
       scenarioHash: hashScenario(scenario),
@@ -149,7 +154,7 @@ export default function Analysis() {
     setAdviceLoading(true);
     setAdviceError(null);
     try {
-      setAdvice(await requestSuggestions(scenario, hashScenario(scenario)));
+      setAdvice(await requestSuggestions(scenario, hashScenario(scenario), committedDecision));
     } catch {
       setAdviceError('Could not reach the coach. Your decision is still saved.');
     } finally {

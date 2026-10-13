@@ -71,18 +71,37 @@ export const postDecision = (
 ): Promise<{ stored: boolean; durable: boolean; total: number }> =>
   request('/api/decisions', { method: 'POST', body: JSON.stringify(payload) });
 
+export interface SuggestionFieldChange {
+  position: string;
+  action: 'push_back' | 'bring_up' | 'finer' | 'squarer';
+}
+
 export interface SuggestionOption {
   id: string;
-  option: { length: string; line: string; variation: string; intent: string };
+  option: {
+    length: string;
+    line: string;
+    variation: string;
+    intent: string;
+    fieldChanges?: SuggestionFieldChange[];
+  };
   because: string;
   unless: string;
   risk: 'low' | 'medium' | 'high';
   confidence: 'high' | 'contested';
 }
 
+/** The read of the call you actually committed to. */
+export interface OnYourCall {
+  reading: string;
+  sharpen: string;
+  risk: 'low' | 'medium' | 'high';
+}
+
 export interface SuggestResponse {
   /** 'model' when OpenAI answered and passed validation; 'computed' otherwise. */
   source: 'model' | 'computed';
+  onYourCall: OnYourCall | null;
   options: SuggestionOption[];
   cached: boolean;
   /** Why a model answer was refused, when it was. */
@@ -92,10 +111,11 @@ export interface SuggestResponse {
 export const requestSuggestions = (
   scenario: unknown,
   scenarioHash: string,
+  decision: unknown,
 ): Promise<SuggestResponse> =>
   request('/api/suggest', {
     method: 'POST',
-    body: JSON.stringify({ scenario, scenarioHash }),
+    body: JSON.stringify({ scenario, scenarioHash, decision }),
   });
 
 export const listDecisions = (): Promise<{ decisions: StoredDecisionRow[]; total: number }> =>

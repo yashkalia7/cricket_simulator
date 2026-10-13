@@ -6,13 +6,22 @@ import {
   type Intent,
   type Length,
   type Line,
+  type PositionId,
   type Variation,
 } from '@cricket/domain';
 import { color, semantic } from '@cricket/tokens';
 import { ActivityIndicator, Text, View } from 'react-native';
 
 import type { SuggestResponse, SuggestionOption } from '../lib/api';
+import { POSITION_LABEL } from '../lib/labels';
 import { Card, Pill } from './primitives';
+
+const ACTION_LABELS: Record<string, string> = {
+  push_back: 'push back',
+  bring_up: 'bring up',
+  finer: 'finer',
+  squarer: 'squarer',
+};
 
 /**
  * What a coach might say — shown **after** you commit, never before.
@@ -80,6 +89,69 @@ export function Suggestions({
 
   return (
     <View style={{ marginTop: 18 }}>
+      {/* The read of the call they actually made. This is the part they came
+          for — it goes first, and it is about their decision, not the field. */}
+      {result.onYourCall && (
+        <Card style={{ marginBottom: 18, borderColor: RISK_TINT[result.onYourCall.risk] }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text
+              style={{
+                color: color.chalk400,
+                fontFamily: 'IBMPlexMono_500Medium',
+                fontSize: 11,
+                letterSpacing: 1.4,
+                flex: 1,
+              }}
+            >
+              YOUR CALL
+            </Text>
+            <Text
+              style={{
+                color: RISK_TINT[result.onYourCall.risk],
+                fontFamily: 'IBMPlexMono_500Medium',
+                fontSize: 10,
+              }}
+            >
+              {result.onYourCall.risk.toUpperCase()} RISK
+            </Text>
+          </View>
+          <Text
+            style={{
+              color: color.chalk100,
+              fontFamily: 'InterTight_400Regular',
+              fontSize: 14.5,
+              lineHeight: 21,
+            }}
+          >
+            {result.onYourCall.reading}
+          </Text>
+          <View style={{ flexDirection: 'row', marginTop: 10 }}>
+            <Text
+              style={{
+                color: semantic.legal,
+                fontFamily: 'IBMPlexMono_500Medium',
+                fontSize: 10,
+                marginRight: 6,
+                marginTop: 2,
+              }}
+            >
+              SHARPEN
+            </Text>
+            <Text
+              style={{
+                color: color.chalk400,
+                fontFamily: 'InterTight_400Regular',
+                fontSize: 13.5,
+                lineHeight: 20,
+                flex: 1,
+              }}
+            >
+              {result.onYourCall.sharpen}
+            </Text>
+          </View>
+        </Card>
+      )}
+
       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
         <Text
           style={{
@@ -90,7 +162,7 @@ export function Suggestions({
             flex: 1,
           }}
         >
-          WHAT A COACH MIGHT SAY
+          WHAT ELSE YOU COULD HAVE BOWLED
         </Text>
         {/* Never hide which engine answered. A computed fallback reads exactly
             like a model answer otherwise, and the two deserve different trust. */}
@@ -174,6 +246,34 @@ export function Suggestions({
           >
             {option.because}
           </Text>
+
+          {(option.option.fieldChanges ?? []).length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 }}>
+              {option.option.fieldChanges!.map((change) => (
+                <View
+                  key={`${change.position}-${change.action}`}
+                  style={{
+                    backgroundColor: 'rgba(62,122,94,0.14)',
+                    borderRadius: 999,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5,
+                    marginRight: 6,
+                    marginBottom: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: semantic.legal,
+                      fontFamily: 'IBMPlexMono_400Regular',
+                      fontSize: 11,
+                    }}
+                  >
+                    {`${POSITION_LABEL[change.position as PositionId] ?? change.position} · ${ACTION_LABELS[change.action]}`}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
 
           <View style={{ flexDirection: 'row', marginTop: 8 }}>
             <Text

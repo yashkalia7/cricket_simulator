@@ -1,17 +1,29 @@
 import {
   INTENTS,
   LENGTHS,
+  LENGTH_LABELS,
   LINES,
+  LINE_LABELS,
+  PHASE_LABELS,
+  SCORING_ZONES,
   VARIATIONS,
+  VARIATION_LABELS,
   ZONE_LABELS,
   batterOptions,
   bowlerRead,
   chaseLabel,
   evaluateField,
+  isPositionId,
   overBallLabel,
+  phase,
+  positionById,
   readField,
+  type PositionId,
   type ScenarioState,
+  type ScoringZone,
 } from '@cricket/domain';
+
+const labelOf = (id: PositionId): string => positionById(id).label.toLowerCase();
 
 /**
  * The model layer (BUILD.md §10).
@@ -69,7 +81,27 @@ HARD RULES
 
 REASONING FRAME
 Work through, in order: what the batter is trying to do; what the field currently permits;
-what this bowler can reliably land; what the ground punishes. Then choose.`;
+what this bowler can reliably land; what the ground punishes. Then choose.
+
+--- EXTENSION (not part of BUILD.md section 10; see docs/DECISIONS.md D-008) ---
+
+A. First, answer the user's own call in "onYourCall". They have already
+   committed — this is the part they actually want. Say what their delivery
+   does in THIS situation against THIS batter with THIS field: what it invites,
+   where it goes when it lands, and where it goes when it does not. Then
+   "sharpen": the one adjustment that most improves it, or the one thing to
+   watch for. Do not grade it out of ten and do not simply praise it.
+
+B. "because" may run to two sentences when the reasoning genuinely needs it.
+   Do not pad. A second sentence that repeats the first is worse than one.
+
+C. Each option may carry "fieldChanges": moves that make that ball work. Use
+   only the fielders named in the situation, and the actions push_back,
+   bring_up, finer or squarer. Leave it empty if the field already suits.
+
+D. Use the recent balls. A batter who has just hit two boundaries in three is
+   a different problem from one who has played out three dots, and the sequence
+   is given to you. Refer to what actually happened.`;
 
 const BANNED = [
   'bowl to your field',
@@ -82,20 +114,38 @@ const BANNED = [
   'channel outside off',
 ];
 
+export interface FieldChange {
+  position: string;
+  action: 'push_back' | 'bring_up' | 'finer' | 'squarer';
+}
+
 export interface ModelOption {
   id: string;
-  option: { length: string; line: string; variation: string; intent: string };
+  option: {
+    length: string;
+    line: string;
+    variation: string;
+    intent: string;
+    fieldChanges?: FieldChange[];
+  };
   because: string;
   unless: string;
   risk: 'low' | 'medium' | 'high';
   confidence: 'high' | 'contested';
 }
 
+/** The model's read of the decision the user actually committed to. */
+export interface OnYourCall {
+  reading: string;
+  sharpen: string;
+  risk: 'low' | 'medium' | 'high';
+}
+
 /**
  * The facts, computed before the model sees anything. This is the difference
  * between asking a model about cricket and asking it to reason over a position.
  */
-export const groundingFor = (scenario: ScenarioState): string => {
+export const groundingFor = (scenario: ScenarioState, decision: unknown): string => {
   const read = readField(scenario.field);
   const execution = bowlerRead(scenario);
   const violations = evaluateField(
@@ -108,19 +158,61 @@ export const groundingFor = (scenario: ScenarioState): string => {
     scenario.field,
   );
 
+  /** Named, with depth — "deep square leg is back" beats "square leg is covered". */
+  const describeZone = (zone: ScoringZone): string => {
+    const cover = read.cover.find((c) => c.zone === zone);
+    if (!cover) return `${ZONE_LABELS[zone]}: nobody`;
+    const parts: string[] = [];
+    if (cover.deep.length) parts.push(`${cover.deep.map(labelOf).join(' and ')} on the rope`);
+    if (cover.ring.length) parts.push(`${cover.ring.map(labelOf).join(' and ')} saving one`);
+    if (cover.catching.length) parts.push(`${cover.catching.map(labelOf).join(' and ')} catching`);
+    return `${ZONE_LABELS[zone]}: ${parts.join(', ') || 'EMPTY — no fielder at all'}`;
+  };
+
+  /** The last twelve balls. In a death over this is the most relevant fact there is. */
+  const tape = scenario.lastDeliveries
+    .map(
+      (d) =>
+        `${d.over}.${d.ball} ${LENGTH_LABELS[d.length]} ${LINE_LABELS[d.line]}` +
+        `${d.variation === 'stock' ? '' : ` (${VARIATION_LABELS[d.variation]})`}` +
+        ` -> ${d.wicket ? 'WICKET' : d.runs === 0 ? 'dot' : `${d.runs}`}`,
+    )
+    .join('\n  ');
+
   const lines = [
-    `Score: ${scenario.score}/${scenario.wicketsLost} after ${overBallLabel(scenario)} (${scenario.format}).`,
-    chaseLabel(scenario) ? `Chase: ${chaseLabel(scenario)}.` : 'Batting first; no target.',
-    `Striker: ${scenario.striker.handedness} ${scenario.striker.archetype}, ${scenario.striker.runs} off ${scenario.striker.ballsFaced}.`,
-    `Bowler: ${scenario.bowler.type}, executionReliability ${scenario.bowler.executionReliability}. ${execution.executionNote}`,
-    `Ground: ${scenario.ground.straightM}m straight, ${scenario.ground.squareM}m square.`,
+    'THE SITUATION',
+    `${scenario.score}/${scenario.wicketsLost} after ${overBallLabel(scenario)}, ${scenario.format}, ${PHASE_LABELS[phase(scenario)]}.`,
+    chaseLabel(scenario) ? `Chasing: ${chaseLabel(scenario)}.` : 'Batting first; no target to chase.',
+    `Pitch ${scenario.pitch}, wear ${scenario.pitchWear === 0 ? 'none' : 'some'}, ball ${scenario.ballCondition} and ${Math.round(scenario.ballAgeOvers)} overs old.` +
+      `${scenario.dew > 40 ? ' Heavy dew — the ball is skidding and hard to grip.' : ''}` +
+      `${scenario.lights ? ' Under lights.' : ''}`,
+    `Ground: ${scenario.ground.straightM}m straight, ${scenario.ground.squareM}m square.` +
+      `${scenario.ground.squareM < 62 ? ' The square boundary is short.' : ''}`,
+    '',
+    'THE BATTER',
+    `${scenario.striker.handedness} ${scenario.striker.archetype}, ${scenario.striker.runs} off ${scenario.striker.ballsFaced}.`,
+    `Non-striker: ${scenario.nonStriker.handedness} ${scenario.nonStriker.archetype}.`,
+    '',
+    'THE BOWLER',
+    `${scenario.bowler.type}, around ${scenario.bowler.avgSpeedKph}kph, executionReliability ${scenario.bowler.executionReliability}.`,
+    execution.executionNote,
+    '',
+    'RECENT BALLS (oldest first)',
+    tape ? `  ${tape}` : '  (none recorded)',
+    '',
+    'THE FIELD, ZONE BY ZONE',
+    ...SCORING_ZONES.map((z) => `  ${describeZone(z)}`),
+    '',
     `Boundary UNGUARDED in: ${read.gaps.map((z) => ZONE_LABELS[z]).join(', ') || 'nowhere — every boundary has a sweeper'}.`,
-    `Boundary protected in: ${read.cover.filter((c) => c.deep.length > 0).map((c) => ZONE_LABELS[c.zone]).join(', ') || 'nowhere'}.`,
     violations.length
       ? `This field is ILLEGAL: ${violations.map((v) => v.message).join('; ')}.`
       : 'This field is legal.',
     '',
-    'These facts are computed and correct. Do not contradict them.',
+    'WHAT THE USER COMMITTED TO',
+    decision ? JSON.stringify(decision) : '(nothing yet)',
+    '',
+    'Every fact above is computed and correct. Do not contradict any of it.',
+    'Refer to fielders by the names given. Do not invent a fielder who is not listed.',
   ];
 
   return lines.join('\n');
@@ -160,16 +252,34 @@ export const validateOptions = (options: ModelOption[]): string[] => {
     if (!(INTENTS as readonly string[]).includes(o.option.intent)) {
       problems.push(`unknown intent: ${o.option.intent}`);
     }
+    // A fielder the model invented would read as authoritative and be wrong.
+    for (const change of o.option.fieldChanges ?? []) {
+      if (!isPositionId(change.position)) {
+        problems.push(`unknown fielding position: ${change.position}`);
+      }
+    }
   }
 
   return problems;
 };
 
+const FIELD_ACTIONS = ['push_back', 'bring_up', 'finer', 'squarer'] as const;
+
 const RESPONSE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['options'],
+  required: ['onYourCall', 'options'],
   properties: {
+    onYourCall: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['reading', 'sharpen', 'risk'],
+      properties: {
+        reading: { type: 'string' },
+        sharpen: { type: 'string' },
+        risk: { type: 'string', enum: ['low', 'medium', 'high'] },
+      },
+    },
     options: {
       type: 'array',
       minItems: 1,
@@ -183,12 +293,25 @@ const RESPONSE_SCHEMA = {
           option: {
             type: 'object',
             additionalProperties: false,
-            required: ['length', 'line', 'variation', 'intent'],
+            required: ['length', 'line', 'variation', 'intent', 'fieldChanges'],
             properties: {
               length: { type: 'string', enum: [...LENGTHS] },
               line: { type: 'string', enum: [...LINES] },
               variation: { type: 'string', enum: [...VARIATIONS] },
               intent: { type: 'string', enum: [...INTENTS] },
+              fieldChanges: {
+                type: 'array',
+                maxItems: 3,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['position', 'action'],
+                  properties: {
+                    position: { type: 'string' },
+                    action: { type: 'string', enum: [...FIELD_ACTIONS] },
+                  },
+                },
+              },
             },
           },
           because: { type: 'string' },
@@ -203,6 +326,7 @@ const RESPONSE_SCHEMA = {
 
 export interface SuggestResult {
   source: 'model' | 'computed';
+  onYourCall: OnYourCall | null;
   options: ModelOption[];
   /** Why the model answer was refused, when it was. */
   rejected?: string[];
@@ -210,9 +334,10 @@ export interface SuggestResult {
 
 const callOpenAi = async (
   scenario: ScenarioState,
+  decision: unknown,
   apiKey: string,
   model: string,
-): Promise<ModelOption[]> => {
+): Promise<{ onYourCall: OnYourCall | null; options: ModelOption[] }> => {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -223,7 +348,7 @@ const callOpenAi = async (
       model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: groundingFor(scenario) },
+        { role: 'user', content: groundingFor(scenario, decision) },
       ],
       response_format: {
         type: 'json_schema',
@@ -245,8 +370,11 @@ const callOpenAi = async (
   const content = body.choices?.[0]?.message?.content;
   if (!content) throw new Error('openai returned no content');
 
-  const parsed = JSON.parse(content) as { options?: ModelOption[] };
-  return parsed.options ?? [];
+  const parsed = JSON.parse(content) as {
+    options?: ModelOption[];
+    onYourCall?: OnYourCall;
+  };
+  return { onYourCall: parsed.onYourCall ?? null, options: parsed.options ?? [] };
 };
 
 /**
@@ -265,30 +393,30 @@ const computedFallback = (scenario: ScenarioState): ModelOption[] =>
 
 export const suggest = async (
   scenario: ScenarioState,
+  decision: unknown,
   apiKey: string | null,
   model: string,
 ): Promise<SuggestResult> => {
-  if (!apiKey) return { source: 'computed', options: computedFallback(scenario) };
+  const fallback = (rejected?: string[]): SuggestResult => ({
+    source: 'computed',
+    onYourCall: null,
+    options: computedFallback(scenario),
+    ...(rejected ? { rejected } : {}),
+  });
+
+  if (!apiKey) return fallback();
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const options = await callOpenAi(scenario, apiKey, model);
+      const { onYourCall, options } = await callOpenAi(scenario, decision, apiKey, model);
       const problems = validateOptions(options);
-      if (problems.length === 0) return { source: 'model', options };
+      if (problems.length === 0) return { source: 'model', onYourCall, options };
       // §10: reject and retry once. On the second failure, fall back.
-      if (attempt === 1) {
-        return { source: 'computed', options: computedFallback(scenario), rejected: problems };
-      }
+      if (attempt === 1) return fallback(problems);
     } catch (error) {
-      if (attempt === 1) {
-        return {
-          source: 'computed',
-          options: computedFallback(scenario),
-          rejected: [String(error).slice(0, 200)],
-        };
-      }
+      if (attempt === 1) return fallback([String(error).slice(0, 200)]);
     }
   }
 
-  return { source: 'computed', options: computedFallback(scenario) };
+  return fallback();
 };

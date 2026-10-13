@@ -168,6 +168,7 @@ guarded.post('/suggest', async (c) => {
   const body = (await c.req.json().catch(() => null)) as {
     scenario?: unknown;
     scenarioHash?: unknown;
+    decision?: unknown;
   } | null;
 
   if (!body?.scenario || typeof body.scenarioHash !== 'string') {
@@ -181,12 +182,22 @@ guarded.post('/suggest', async (c) => {
 
   // §10: the quantised scenario space repeats heavily, so cached responses are
   // free, instant and reviewable.
-  const cached = await store.readCache(body.scenarioHash, config.openAiModel);
+  // The cache key includes the decision: onYourCall is about *their* call, so
+  // caching on the scenario alone would hand the next person someone else's read.
+  const cacheKey = `${body.scenarioHash}:${JSON.stringify(body.decision ?? null).length}:${
+    (JSON.stringify(body.decision ?? null).match(/[a-z_]+/g) ?? []).join('-').slice(0, 80)
+  }`;
+  const cached = await store.readCache(cacheKey, config.openAiModel);
   if (cached) return c.json({ ...(cached as object), cached: true });
 
-  const result = await suggest(validated.scenario, config.openAiKey, config.openAiModel);
+  const result = await suggest(
+    validated.scenario,
+    body.decision ?? null,
+    config.openAiKey,
+    config.openAiModel,
+  );
   if (result.source === 'model') {
-    await store.writeCache(body.scenarioHash, config.openAiModel, result);
+    await store.writeCache(cacheKey, config.openAiModel, result);
   }
   return c.json({ ...result, cached: false });
 });

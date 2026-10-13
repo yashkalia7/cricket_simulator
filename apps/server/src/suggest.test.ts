@@ -78,27 +78,27 @@ describe('validateOptions — §10 rejection rules', () => {
 
 describe('groundingFor', () => {
   it('states the computed facts the model must not contradict', () => {
-    const text = groundingFor(PRESETS[1]!);
+    const text = groundingFor(PRESETS[1]!, null);
     expect(text).toContain('Boundary UNGUARDED in:');
-    expect(text).toContain('Boundary protected in:');
+    expect(text).toContain('THE FIELD, ZONE BY ZONE');
     expect(text).toContain('executionReliability');
-    expect(text).toContain('Do not contradict them');
+    expect(text).toContain('Do not contradict any of it');
   });
 
   it('says plainly when the field is legal', () => {
-    expect(groundingFor(PRESETS[0]!)).toContain('This field is legal.');
+    expect(groundingFor(PRESETS[0]!, null)).toContain('This field is legal.');
   });
 
   it('includes the chase equation when chasing and says so when not', () => {
     const chasing = PRESETS.find((p) => p.target !== null)!;
     const first = PRESETS.find((p) => p.target === null)!;
-    expect(groundingFor(chasing)).toContain('Chase:');
-    expect(groundingFor(first)).toContain('Batting first');
+    expect(groundingFor(chasing, null)).toContain('Chasing:');
+    expect(groundingFor(first, null)).toContain('Batting first');
   });
 
   it('never leaks a secret-shaped string', () => {
     for (const preset of PRESETS) {
-      expect(groundingFor(preset)).not.toMatch(/sk-|Bearer |password/i);
+      expect(groundingFor(preset, null)).not.toMatch(/sk-|Bearer |password/i);
     }
   });
 });
