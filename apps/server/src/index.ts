@@ -12,7 +12,8 @@ import {
   requireSession,
   setSessionCookie,
 } from './auth';
-import { validateScenario } from '@cricket/domain';
+import { createHash } from 'node:crypto';
+import { canonicalJson, validateScenario } from '@cricket/domain';
 import { loadConfig } from './env';
 import { createMemoryStore, createPostgresStore, type Store } from './store';
 import { suggest } from './suggest';
@@ -36,26 +37,49 @@ const config = loadConfig();
  * and why, and nothing pretends a decision was durably stored.
  */
 let store: Store = createMemoryStore();
-let storeError: string | null = null;
+let storeError: string | null = config.databaseUrl ? null : 'DATABASE_URL is not set.';
+let lastConnectAttempt = 0;
 
-if (config.databaseUrl) {
+const explain = (error: unknown): string => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/ENETUNREACH/.test(message)) {
+    return 'Cannot reach the database over IPv6. Use the Supabase Transaction pooler URI ' +
+      '(host contains pooler.supabase.com, port 6543) — Render has no IPv6 egress.';
+  }
+  if (/Tenant or user not found|tenant\/user/i.test(message)) {
+    return 'The pooler does not recognise this project. The Supabase project is probably ' +
+      'paused (free projects pause after about a week idle), or the username is missing the ' +
+      'project ref. Resume it and this will reconnect on its own.';
+  }
+  return message.slice(0, 300);
+};
+
+/**
+ * Connect, and keep trying.
+ *
+ * The first version connected once at boot and fell back to memory forever. A
+ * paused Supabase therefore degraded the server permanently — resuming the
+ * database changed nothing until somebody redeployed, which is not a thing
+ * anyone would guess. It now retries in the background, at most once a minute.
+ */
+const ensureStore = async (): Promise<void> => {
+  if (!config.databaseUrl || store.kind === 'postgres') return;
+  if (Date.now() - lastConnectAttempt < 60_000) return;
+  lastConnectAttempt = Date.now();
+
   try {
     const pg = createPostgresStore(config.databaseUrl);
     await pg.init();
     store = pg;
+    storeError = null;
+    process.stdout.write('DATABASE CONNECTED\n');
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    storeError = /ENETUNREACH/.test(message)
-      ? 'Cannot reach the database over IPv6. Use the Supabase *Transaction pooler* URI ' +
-        '(host contains pooler.supabase.com, port 6543) — Render has no IPv6 egress, so the ' +
-        'direct connection on 5432 can never work.'
-      : message.slice(0, 300);
-    process.stdout.write(`DATABASE NOT CONNECTED: ${storeError}
-`);
+    storeError = explain(error);
+    process.stdout.write(`DATABASE NOT CONNECTED: ${storeError}\n`);
   }
-} else {
-  storeError = 'DATABASE_URL is not set.';
-}
+};
+
+await ensureStore();
 
 const app = new Hono();
 app.use('*', logger());
@@ -64,16 +88,17 @@ app.use('*', logger());
 /* Health                                                                    */
 /* ------------------------------------------------------------------------- */
 
-app.get('/api/health', async (c) =>
-  c.json({
+app.get('/api/health', async (c) => {
+  await ensureStore();
+  return c.json({
     ok: true,
     store: store.kind,
     // Present whenever decisions are NOT being durably stored.
     storeError,
     decisions: await store.count(),
     model: config.openAiKey ? config.openAiModel : null,
-  }),
-);
+  });
+});
 
 /* ------------------------------------------------------------------------- */
 /* Session                                                                   */
@@ -112,6 +137,7 @@ const guarded = new Hono();
 guarded.use('*', requireSession(config));
 
 guarded.post('/decisions', async (c) => {
+  await ensureStore();
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body || typeof body.id !== 'string' || typeof body.scenarioHash !== 'string') {
     return c.json({ error: 'malformed_decision' }, 400);
@@ -182,13 +208,28 @@ guarded.post('/suggest', async (c) => {
 
   // §10: the quantised scenario space repeats heavily, so cached responses are
   // free, instant and reviewable.
-  // The cache key includes the decision: onYourCall is about *their* call, so
-  // caching on the scenario alone would hand the next person someone else's read.
-  const cacheKey = `${body.scenarioHash}:${JSON.stringify(body.decision ?? null).length}:${
-    (JSON.stringify(body.decision ?? null).match(/[a-z_]+/g) ?? []).join('-').slice(0, 80)
-  }`;
-  const cached = await store.readCache(cacheKey, config.openAiModel);
-  if (cached) return c.json({ ...(cached as object), cached: true });
+  /*
+   * The cache key is the scenario *and* the decision, hashed properly.
+   *
+   * onYourCall is a read of their specific call, so keying on the scenario
+   * alone would hand the next person someone else's answer. The first version
+   * concatenated a string length and some extracted letters, which could
+   * collide between genuinely different decisions.
+   */
+  const cacheKey = createHash('sha256')
+    .update(`${body.scenarioHash}|${canonicalJson(body.decision ?? null)}`)
+    .digest('hex')
+    .slice(0, 32);
+
+  // §10 caches because the quantised scenario space repeats heavily and a
+  // repeat is then free and instant. But that also makes an identical question
+  // give an identical answer forever, so `rethink` deliberately skips it.
+  const rethink = c.req.query('rethink') === '1';
+
+  if (!rethink) {
+    const cached = await store.readCache(cacheKey, config.openAiModel);
+    if (cached) return c.json({ ...(cached as object), cached: true });
+  }
 
   const result = await suggest(
     validated.scenario,

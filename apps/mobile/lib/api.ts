@@ -123,8 +123,10 @@ export const requestSuggestions = (
   scenario: unknown,
   scenarioHash: string,
   decision: unknown,
+  /** Skip the cache and ask again. The model samples, so the answer differs. */
+  rethink = false,
 ): Promise<SuggestResponse> =>
-  request('/api/suggest', {
+  request(`/api/suggest${rethink ? '?rethink=1' : ''}`, {
     method: 'POST',
     body: JSON.stringify({ scenario, scenarioHash, decision }),
   });

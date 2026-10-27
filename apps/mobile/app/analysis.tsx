@@ -72,6 +72,7 @@ export default function Analysis() {
   const [advice, setAdvice] = useState<SuggestResponse | null>(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
+  const [lastDecision, setLastDecision] = useState<unknown>(null);
 
   const moveFielder = useCallback((fielderId: string, to: Vec2) => {
     setField((current) => {
@@ -151,10 +152,20 @@ export default function Analysis() {
 
     // Only now. The app asks, you answer, and the options come after — showing
     // them first would make this an answer key rather than a decision gym (§1).
+    setLastDecision(committedDecision);
+    await fetchAdvice(committedDecision, false);
+  };
+
+  /**
+   * `rethink` skips the server cache. The model samples, so asking again for
+   * the same position gives a genuinely different answer — without it, an
+   * identical question returns an identical cached answer forever.
+   */
+  const fetchAdvice = async (decision: unknown, rethink: boolean) => {
     setAdviceLoading(true);
     setAdviceError(null);
     try {
-      setAdvice(await requestSuggestions(scenario, hashScenario(scenario), committedDecision));
+      setAdvice(await requestSuggestions(scenario, hashScenario(scenario), decision, rethink));
     } catch {
       setAdviceError('Could not reach the coach. Your decision is still saved.');
     } finally {
@@ -447,7 +458,14 @@ export default function Analysis() {
         </Pressable>
 
         {/* The answer, after the commitment — never before it. */}
-        <Suggestions loading={adviceLoading} result={advice} error={adviceError} />
+        <Suggestions
+          loading={adviceLoading}
+          result={advice}
+          error={adviceError}
+          onRethink={
+            lastDecision !== null ? () => void fetchAdvice(lastDecision, true) : undefined
+          }
+        />
       </ScrollView>
     </SafeAreaView>
   );

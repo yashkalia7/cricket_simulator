@@ -10,7 +10,7 @@ import {
   type Variation,
 } from '@cricket/domain';
 import { color, semantic } from '@cricket/tokens';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import type { SuggestResponse, SuggestionOption } from '../lib/api';
 import { POSITION_LABEL } from '../lib/labels';
@@ -78,10 +78,12 @@ export function Suggestions({
   loading,
   result,
   error,
+  onRethink,
 }: {
   loading: boolean;
   result: SuggestResponse | null;
   error: string | null;
+  onRethink?: () => void;
 }) {
   if (loading) {
     return (
@@ -379,16 +381,45 @@ export function Suggestions({
         </Card>
       )}
 
+      {onRethink && (
+        <Pressable
+          onPress={onRethink}
+          accessibilityRole="button"
+          accessibilityLabel="Ask again for a different answer"
+          style={{
+            marginTop: 14,
+            minHeight: 46,
+            borderRadius: 10,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: color.ink500,
+            backgroundColor: color.ink800,
+          }}
+        >
+          <Text
+            style={{
+              color: color.chalk100,
+              fontFamily: 'InterTight_500Medium',
+              fontSize: 14,
+            }}
+          >
+            Think again — a different read
+          </Text>
+        </Pressable>
+      )}
+
       {result.cached && (
         <Text
           style={{
             color: color.chalk400,
             fontFamily: 'IBMPlexMono_400Regular',
             fontSize: 10,
-            marginTop: 2,
+            marginTop: 8,
+            textAlign: 'center',
           }}
         >
-          CACHED — THIS SITUATION HAS BEEN ASKED BEFORE
+          CACHED ANSWER — PRESS THINK AGAIN FOR A FRESH ONE
         </Text>
       )}
     </View>
