@@ -8,6 +8,7 @@ const ok: ModelOption = {
   option: { length: 'yorker', line: 'wide_off', variation: 'stock', intent: 'deny_boundary' },
   because: 'He is set and swinging through the line, and the wide yorker removes the arc.',
   unless: 'A missed wide yorker is a low full toss outside off and he frees his arms.',
+  howTheOverDevelops: 'If it lands, follow it with the same ball; if it misses, go straight.',
   risk: 'medium',
   confidence: 'high',
 };

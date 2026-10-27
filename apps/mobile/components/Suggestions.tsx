@@ -16,6 +16,34 @@ import type { SuggestResponse, SuggestionOption } from '../lib/api';
 import { POSITION_LABEL } from '../lib/labels';
 import { Card, Pill } from './primitives';
 
+function Para({ label, text, tint }: { label: string; text: string; tint?: string }) {
+  return (
+    <View style={{ marginTop: 10 }}>
+      <Text
+        style={{
+          color: tint ?? color.chalk400,
+          fontFamily: 'IBMPlexMono_500Medium',
+          fontSize: 10,
+          letterSpacing: 1.1,
+          marginBottom: 4,
+        }}
+      >
+        {label}
+      </Text>
+      <Text
+        style={{
+          color: color.chalk100,
+          fontFamily: 'InterTight_400Regular',
+          fontSize: 14,
+          lineHeight: 21,
+        }}
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 const ACTION_LABELS: Record<string, string> = {
   push_back: 'push back',
   bring_up: 'bring up',
@@ -89,6 +117,25 @@ export function Suggestions({
 
   return (
     <View style={{ marginTop: 18 }}>
+      {/* The position itself, before any option is offered. */}
+      {result.theRead && (
+        <Card style={{ marginBottom: 14 }}>
+          <Text
+            style={{
+              color: color.chalk400,
+              fontFamily: 'IBMPlexMono_500Medium',
+              fontSize: 11,
+              letterSpacing: 1.4,
+            }}
+          >
+            THE READ
+          </Text>
+          <Para label="WHAT HE IS TRYING TO DO" text={result.theRead.batterIntent} />
+          <Para label="WHAT YOU HAVE TO WORK WITH" text={result.theRead.bowlerLeverage} />
+          <Para label="GROUND AND CONDITIONS" text={result.theRead.groundAndConditions} />
+        </Card>
+      )}
+
       {/* The read of the call they actually made. This is the part they came
           for — it goes first, and it is about their decision, not the field. */}
       {result.onYourCall && (
@@ -125,30 +172,17 @@ export function Suggestions({
           >
             {result.onYourCall.reading}
           </Text>
-          <View style={{ flexDirection: 'row', marginTop: 10 }}>
-            <Text
-              style={{
-                color: semantic.legal,
-                fontFamily: 'IBMPlexMono_500Medium',
-                fontSize: 10,
-                marginRight: 6,
-                marginTop: 2,
-              }}
-            >
-              SHARPEN
-            </Text>
-            <Text
-              style={{
-                color: color.chalk400,
-                fontFamily: 'InterTight_400Regular',
-                fontSize: 13.5,
-                lineHeight: 20,
-                flex: 1,
-              }}
-            >
-              {result.onYourCall.sharpen}
-            </Text>
-          </View>
+          <Para
+            label="WHEN IT LANDS"
+            text={result.onYourCall.whenItLands}
+            tint={semantic.legal}
+          />
+          <Para
+            label="WHEN IT MISSES"
+            text={result.onYourCall.whenItMisses}
+            tint={semantic.warning}
+          />
+          <Para label="SHARPEN" text={result.onYourCall.sharpen} tint={semantic.legal} />
         </Card>
       )}
 
@@ -275,32 +309,75 @@ export function Suggestions({
             </View>
           )}
 
-          <View style={{ flexDirection: 'row', marginTop: 8 }}>
+          <Para label="UNLESS" text={option.unless} tint={semantic.warning} />
+          {option.howTheOverDevelops && (
+            <Para label="WHAT IT SETS UP" text={option.howTheOverDevelops} />
+          )}
+        </Card>
+      ))}
+
+      {result.overPlan && (
+        <Card style={{ marginTop: 4 }}>
+          <Text
+            style={{
+              color: color.chalk400,
+              fontFamily: 'IBMPlexMono_500Medium',
+              fontSize: 11,
+              letterSpacing: 1.4,
+            }}
+          >
+            THE REST OF THE OVER
+          </Text>
+          <Text
+            style={{
+              color: color.chalk100,
+              fontFamily: 'InterTight_400Regular',
+              fontSize: 14,
+              lineHeight: 21,
+              marginTop: 8,
+            }}
+          >
+            {result.overPlan}
+          </Text>
+        </Card>
+      )}
+
+      {/* When the model answered and was refused, say so and say why. A silent
+          fallback is indistinguishable from a model that simply writes badly. */}
+      {result.source === 'computed' && result.rejected && result.rejected.length > 0 && (
+        <Card
+          style={{
+            marginTop: 10,
+            backgroundColor: 'rgba(224,163,74,0.1)',
+            borderColor: 'rgba(224,163,74,0.3)',
+          }}
+        >
+          <Text
+            style={{
+              color: semantic.warning,
+              fontFamily: 'IBMPlexMono_500Medium',
+              fontSize: 10,
+              letterSpacing: 1.1,
+              marginBottom: 6,
+            }}
+          >
+            THE MODEL ANSWERED AND WAS REFUSED
+          </Text>
+          {result.rejected.slice(0, 4).map((reason) => (
             <Text
-              style={{
-                color: semantic.warning,
-                fontFamily: 'IBMPlexMono_500Medium',
-                fontSize: 10,
-                marginRight: 6,
-                marginTop: 2,
-              }}
-            >
-              UNLESS
-            </Text>
-            <Text
+              key={reason}
               style={{
                 color: color.chalk400,
                 fontFamily: 'InterTight_400Regular',
-                fontSize: 13,
-                lineHeight: 19,
-                flex: 1,
+                fontSize: 12.5,
+                lineHeight: 18,
               }}
             >
-              {option.unless}
+              {`· ${reason}`}
             </Text>
-          </View>
+          ))}
         </Card>
-      ))}
+      )}
 
       {result.cached && (
         <Text

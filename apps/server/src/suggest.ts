@@ -46,7 +46,14 @@ players use it. Your output is displayed as options for the user to choose betwe
 are never the answer.
 
 RETURN FORMAT
-Return ONLY a JSON object with an "options" array. No preamble, no markdown fences, no commentary.
+Return ONLY a JSON object. No preamble, no markdown fences, no commentary. It has four
+parts and all four are required: theRead, onYourCall, options, overPlan.
+
+LENGTH
+Write like a coach talking a bowler through an over, not like a caption. theRead and
+overPlan are three to five sentences each. Every "because" is two to four sentences.
+Thin answers are the failure mode here — if you find yourself with one short sentence,
+you have not finished the thought. Never pad: add reasoning, not words.
 
 HARD RULES
 
@@ -120,10 +127,34 @@ E. GROUND EVERY ANSWER IN THIS POSITION. Each option, and onYourCall, must name
       and he has already taken a six off the leg stump this over. Going wider
       moves the ball away from the arc he just used."
 
-F. Write for a coach who is in a hurry but wants the reasoning, not a slogan.
-   Two sentences in "because" is normal; one is fine when it is genuinely
-   complete. Do not restate the delivery you just named — explain what it does
-   to this batter, in this over, against this field.`;
+F. Write for a coach who wants the reasoning, not a slogan. Do not restate the
+   delivery you just named — explain what it does to THIS batter, in THIS over,
+   against THIS field.
+
+G. The four parts do different jobs. Do not repeat yourself across them.
+
+   theRead.batterIntent      — what he is trying to do right now and why, read
+                               from his type, his score, and the balls he has
+                               just played. Where is he looking to hit?
+   theRead.bowlerLeverage    — what this particular bowler actually has to work
+                               with here: pace, the variations his type can
+                               bowl, and what his execution number permits.
+   theRead.groundAndConditions — what the ground and the conditions punish and
+                               reward tonight. Which side is the cheap miss?
+
+   onYourCall.reading        — what the user's ball does in this exact position.
+   onYourCall.whenItLands    — the good outcome, concretely: where it goes and
+                               what it costs.
+   onYourCall.whenItMisses   — the bad outcome, concretely: what the miss turns
+                               into and which part of the ground it finds.
+   onYourCall.sharpen        — the single adjustment that most improves it.
+
+   option.howTheOverDevelops — what this ball sets up. A ball is rarely a plan
+                               on its own; say what you bowl next if it works
+                               and what you bowl next if it does not.
+
+   overPlan                  — how you would sequence the balls that remain,
+                               given the match situation. Name the balls.`;
 
 const BANNED = [
   'bowl to your field',
@@ -152,13 +183,23 @@ export interface ModelOption {
   };
   because: string;
   unless: string;
+  howTheOverDevelops: string;
   risk: 'low' | 'medium' | 'high';
   confidence: 'high' | 'contested';
+}
+
+/** The position, before any option is offered. */
+export interface TheRead {
+  batterIntent: string;
+  bowlerLeverage: string;
+  groundAndConditions: string;
 }
 
 /** The model's read of the decision the user actually committed to. */
 export interface OnYourCall {
   reading: string;
+  whenItLands: string;
+  whenItMisses: string;
   sharpen: string;
   risk: 'low' | 'medium' | 'high';
 }
@@ -333,18 +374,31 @@ const FIELD_ACTIONS = ['push_back', 'bring_up', 'finer', 'squarer'] as const;
 const RESPONSE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['onYourCall', 'options'],
+  required: ['theRead', 'onYourCall', 'options', 'overPlan'],
   properties: {
+    theRead: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['batterIntent', 'bowlerLeverage', 'groundAndConditions'],
+      properties: {
+        batterIntent: { type: 'string' },
+        bowlerLeverage: { type: 'string' },
+        groundAndConditions: { type: 'string' },
+      },
+    },
     onYourCall: {
       type: 'object',
       additionalProperties: false,
-      required: ['reading', 'sharpen', 'risk'],
+      required: ['reading', 'whenItLands', 'whenItMisses', 'sharpen', 'risk'],
       properties: {
         reading: { type: 'string' },
+        whenItLands: { type: 'string' },
+        whenItMisses: { type: 'string' },
         sharpen: { type: 'string' },
         risk: { type: 'string', enum: ['low', 'medium', 'high'] },
       },
     },
+    overPlan: { type: 'string' },
     options: {
       type: 'array',
       minItems: 1,
@@ -352,7 +406,15 @@ const RESPONSE_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['id', 'option', 'because', 'unless', 'risk', 'confidence'],
+        required: [
+          'id',
+          'option',
+          'because',
+          'unless',
+          'howTheOverDevelops',
+          'risk',
+          'confidence',
+        ],
         properties: {
           id: { type: 'string' },
           option: {
@@ -381,6 +443,7 @@ const RESPONSE_SCHEMA = {
           },
           because: { type: 'string' },
           unless: { type: 'string' },
+          howTheOverDevelops: { type: 'string' },
           risk: { type: 'string', enum: ['low', 'medium', 'high'] },
           confidence: { type: 'string', enum: ['high', 'contested'] },
         },
@@ -391,7 +454,9 @@ const RESPONSE_SCHEMA = {
 
 export interface SuggestResult {
   source: 'model' | 'computed';
+  theRead: TheRead | null;
   onYourCall: OnYourCall | null;
+  overPlan: string | null;
   options: ModelOption[];
   /** Why the model answer was refused, when it was. */
   rejected?: string[];
@@ -402,7 +467,12 @@ const callOpenAi = async (
   decision: unknown,
   apiKey: string,
   model: string,
-): Promise<{ onYourCall: OnYourCall | null; options: ModelOption[] }> => {
+): Promise<{
+  theRead: TheRead | null;
+  onYourCall: OnYourCall | null;
+  overPlan: string | null;
+  options: ModelOption[];
+}> => {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -438,23 +508,42 @@ const callOpenAi = async (
   const parsed = JSON.parse(content) as {
     options?: ModelOption[];
     onYourCall?: OnYourCall;
+    theRead?: TheRead;
+    overPlan?: string;
   };
-  return { onYourCall: parsed.onYourCall ?? null, options: parsed.options ?? [] };
+  return {
+    theRead: parsed.theRead ?? null,
+    onYourCall: parsed.onYourCall ?? null,
+    overPlan: parsed.overPlan ?? null,
+    options: parsed.options ?? [],
+  };
 };
 
 /**
  * The deterministic answer, shaped like a model answer, used when the model is
  * absent, broken or refused. The app always has something to show.
  */
-const computedFallback = (scenario: ScenarioState): ModelOption[] =>
-  batterOptions(scenario).map((o, i) => ({
+const computedFallback = (scenario: ScenarioState): ModelOption[] => {
+  return batterOptions(scenario).map((o, i) => ({
     id: `computed_${i}`,
-    option: { length: 'good', line: 'off_stump', variation: 'stock', intent: 'contain' },
+    // The computed engine reasons about shots and gaps, not deliveries. Giving
+    // every option the same hardcoded ball made three identical cards and read
+    // as a broken model rather than as a deliberate fallback.
+    option: {
+      length: 'good',
+      line: 'off_stump',
+      variation: 'stock',
+      intent: 'contain',
+      fieldChanges: [],
+    },
     because: o.because,
     unless: o.unless,
+    howTheOverDevelops:
+      'Computed from the field only — no sequencing advice without the model.',
     risk: o.risk,
     confidence: 'high' as const,
   }));
+};
 
 export const suggest = async (
   scenario: ScenarioState,
@@ -464,7 +553,9 @@ export const suggest = async (
 ): Promise<SuggestResult> => {
   const fallback = (rejected?: string[]): SuggestResult => ({
     source: 'computed',
+    theRead: null,
     onYourCall: null,
+    overPlan: null,
     options: computedFallback(scenario),
     ...(rejected ? { rejected } : {}),
   });
@@ -473,9 +564,16 @@ export const suggest = async (
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const { onYourCall, options } = await callOpenAi(scenario, decision, apiKey, model);
+      const { theRead, onYourCall, overPlan, options } = await callOpenAi(
+        scenario,
+        decision,
+        apiKey,
+        model,
+      );
       const problems = validateOptions(options, scenario);
-      if (problems.length === 0) return { source: 'model', onYourCall, options };
+      if (problems.length === 0) {
+        return { source: 'model', theRead, onYourCall, overPlan, options };
+      }
       // §10: reject and retry once. On the second failure, fall back.
       if (attempt === 1) return fallback(problems);
     } catch (error) {

@@ -87,13 +87,22 @@ export interface SuggestionOption {
   };
   because: string;
   unless: string;
+  howTheOverDevelops: string;
   risk: 'low' | 'medium' | 'high';
   confidence: 'high' | 'contested';
+}
+
+export interface TheRead {
+  batterIntent: string;
+  bowlerLeverage: string;
+  groundAndConditions: string;
 }
 
 /** The read of the call you actually committed to. */
 export interface OnYourCall {
   reading: string;
+  whenItLands: string;
+  whenItMisses: string;
   sharpen: string;
   risk: 'low' | 'medium' | 'high';
 }
@@ -101,7 +110,9 @@ export interface OnYourCall {
 export interface SuggestResponse {
   /** 'model' when OpenAI answered and passed validation; 'computed' otherwise. */
   source: 'model' | 'computed';
+  theRead: TheRead | null;
   onYourCall: OnYourCall | null;
+  overPlan: string | null;
   options: SuggestionOption[];
   cached: boolean;
   /** Why a model answer was refused, when it was. */
