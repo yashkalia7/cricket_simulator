@@ -583,7 +583,7 @@ export default function DecisionScreen() {
           onPress={commit}
           disabled={!ready || committed !== null}
           accessibilityRole="button"
-          accessibilityLabel="Commit this decision"
+          accessibilityLabel="Analyse my call"
           style={{
             marginTop: 18,
             minHeight: 54,
@@ -607,10 +607,10 @@ export default function DecisionScreen() {
                 ? 'Saved to the log ✓'
                 : 'Saved on this device only'
               : ready
-                ? 'Commit'
+                ? 'Analyse my call'
                 : role === 'BOWLER'
-                  ? 'Pick length, line and intent'
-                  : 'Pick a shot'}
+                  ? 'Choose a length, line and intent first'
+                  : 'Choose a shot first'}
           </Text>
         </Pressable>
 

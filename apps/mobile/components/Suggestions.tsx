@@ -97,7 +97,7 @@ export function Suggestions({
             marginLeft: 12,
           }}
         >
-          Working through the situation…
+          Reading the situation…
         </Text>
       </Card>
     );
@@ -198,7 +198,7 @@ export function Suggestions({
             flex: 1,
           }}
         >
-          WHAT ELSE YOU COULD HAVE BOWLED
+          WHAT ELSE YOU COULD HAVE DONE
         </Text>
         {/* Never hide which engine answered. A computed fallback reads exactly
             like a model answer otherwise, and the two deserve different trust. */}
@@ -222,7 +222,7 @@ export function Suggestions({
       >
         {result.source === 'model'
           ? 'None of these is the answer. They are defensible options — the disagreement is the lesson.'
-          : 'The model did not answer, so these are computed from the field itself.'}
+          : 'Worked out from the field itself, not from a coach.'}
       </Text>
 
       {result.options.map((option) => (
@@ -328,7 +328,7 @@ export function Suggestions({
               letterSpacing: 1.4,
             }}
           >
-            THE REST OF THE OVER
+            HOW TO PLAY THE REST OF THE OVER
           </Text>
           <Text
             style={{
@@ -363,7 +363,7 @@ export function Suggestions({
               marginBottom: 6,
             }}
           >
-            THE MODEL ANSWERED AND WAS REFUSED
+            THE COACH ANSWERED AND WAS TURNED DOWN
           </Text>
           {result.rejected.slice(0, 4).map((reason) => (
             <Text
@@ -404,7 +404,7 @@ export function Suggestions({
               fontSize: 14,
             }}
           >
-            Think again — a different read
+            Ask again for a different read
           </Text>
         </Pressable>
       )}
@@ -419,7 +419,7 @@ export function Suggestions({
             textAlign: 'center',
           }}
         >
-          CACHED ANSWER — PRESS THINK AGAIN FOR A FRESH ONE
+          YOU HAVE ASKED THIS BEFORE — THIS IS THE SAME ANSWER
         </Text>
       )}
     </View>

@@ -426,7 +426,7 @@ export default function Analysis() {
           onPress={commit}
           disabled={!ready || committed !== null}
           accessibilityRole="button"
-          accessibilityLabel="Commit this decision"
+          accessibilityLabel="Analyse my call"
           style={{
             marginTop: 20,
             minHeight: 54,
@@ -444,20 +444,36 @@ export default function Analysis() {
             }}
           >
             {committed
-              ? committed === 'stored'
-                ? 'Saved to the log ✓'
-                : committed === 'memory-only'
-                  ? 'Saved — but the database is not connected'
-                  : 'Saved on this device only'
+              ? 'Analysed ✓'
               : ready
-                ? 'Commit'
+                ? 'Analyse my call'
                 : role === 'BOWLER'
-                  ? 'Pick length, line and intent'
-                  : 'Pick a shot'}
+                  ? 'Choose a length, line and intent first'
+                  : 'Choose a shot first'}
           </Text>
         </Pressable>
 
-        {/* The answer, after the commitment — never before it. */}
+        {/* Where it was kept. Quiet, but never silent — the button should say
+            what you got, and this should say what actually happened to it. */}
+        {committed && (
+          <Text
+            style={{
+              color: committed === 'stored' ? color.chalk400 : semantic.warning,
+              fontFamily: 'InterTight_400Regular',
+              fontSize: 12,
+              textAlign: 'center',
+              marginTop: 8,
+            }}
+          >
+            {committed === 'stored'
+              ? 'Kept in the team history'
+              : committed === 'memory-only'
+                ? 'Not kept — the team history is offline right now'
+                : 'Kept on this device only — could not reach the server'}
+          </Text>
+        )}
+
+        {/* The answer, after the call is made — never before it. */}
         <Suggestions
           loading={adviceLoading}
           result={advice}
